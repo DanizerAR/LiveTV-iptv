@@ -645,34 +645,71 @@ class LiveViewModel(
     private val railSnapshot: StateFlow<Pair<Ctx?, List<LiveRailItem>>> = ctx
         .flatMapLatest { c ->
             if (c.profileId < 0) flowOf(null to defaultRail)
-            else combine(
-                categoryDao.observe(c.sourceIds, MediaType.LIVE),
-                customize.visibleOnceRead(c.profileId, MediaType.LIVE).filterNotNull(),
-                combine(sortMode, settings.liveBuiltIns) { s, b -> s to b },
-                // Catch-up sits between History and All, but ONLY when the provider actually advertises
-                // an archive — otherwise every user without catch-up gets a folder that can never fill.
-                channelDao.lockAwareCatchupCount(c.sourceIds.ifEmpty { listOf(-1L) }, sealedCategoryIds).distinctUntilChanged(),
-                profileDao.observeById(c.profileId),
-            ) { cats, cust, (sort, builtIns), catchupCount, profile ->
-                // The categories follow the sort chip too (A–Z by shown name, custom categories
-                // included); a category the user moved keeps its place in either sort. Custom categories
-                // ride the SAME customization keys, so renames/hides/reorders apply to them too.
-                val folders = cats.railCategories(
-                    cust,
-                    kids = profile?.isKids == true,
-                    alphabetical = sort == SettingsRepository.SortMode.ALPHA,
-                )
-                val multiSourceNames = c.sourceNames.takeIf { it.size > 1 }.orEmpty()
-                val categoriesById = cats.associateBy { it.id }
-                c to railWithCatchup(catchupCount > 0, builtIns) + folders.map { e ->
-                    LiveRailItem(
-                        key = e.categoryId?.let { LiveKey.Folder(it) } ?: LiveKey.Custom(e.customId!!),
-                        title = e.displayName, locked = e.locked, sealed = e.sealed,
-                        providerName = e.categoryId
-                            ?.let(categoriesById::get)
-                            ?.sourceId
-                            ?.let(multiSourceNames::get),
+            else {
+                val base = combine(
+                    categoryDao.observe(c.sourceIds, MediaType.LIVE),
+                    customize.visibleOnceRead(c.profileId, MediaType.LIVE).filterNotNull(),
+                    combine(sortMode, settings.liveBuiltIns) { s, b -> s to b },
+                    // Catch-up sits between History and All, but ONLY when the provider actually advertises
+                    // an archive — otherwise every user without catch-up gets a folder that can never fill.
+                    channelDao.lockAwareCatchupCount(c.sourceIds.ifEmpty { listOf(-1L) }, sealedCategoryIds).distinctUntilChanged(),
+                    profileDao.observeById(c.profileId),
+                ) { cats, cust, (sort, builtIns), catchupCount, profile ->
+                    RailBase(
+                        cats = cats,
+                        cust = cust,
+                        alphabetical = sort == SettingsRepository.SortMode.ALPHA,
+                        kids = profile?.isKids == true,
+                        catchup = catchupCount > 0,
+                        builtIns = builtIns,
+                        sourceNames = c.sourceNames.takeIf { it.size > 1 }.orEmpty(),
                     )
+                }
+                combine(
+                    base,
+                    LiveUiStore.mergeSameNameCategories,
+                    LiveUiStore.hideEmptyCategories,
+                    channelDao.observeCountsByCategory(c.sourceIds.ifEmpty { listOf(-1L) }),
+                ) { b, mergeSameName, hideEmpty, countRows ->
+                    // The categories follow the sort chip too (A–Z by shown name, custom categories
+                    // included); a category the user moved keeps its place in either sort. Custom categories
+                    // ride the SAME customization keys, so renames/hides/reorders apply to them too.
+                    val folders = b.cats.railCategories(b.cust, kids = b.kids, alphabetical = b.alphabetical)
+                    val categoriesById = b.cats.associateBy { it.id }
+                    val entries = folders.map { e ->
+                        RailFolder(
+                            categoryId = e.categoryId,
+                            customId = e.customId,
+                            displayName = e.displayName,
+                            sourceId = e.categoryId?.let(categoriesById::get)?.sourceId ?: -1L,
+                            locked = e.locked,
+                            sealed = e.sealed,
+                        )
+                    }
+                    // The same name in two playlists is one category, holding both playlists' channels.
+                    val (grouped, merged) = mergeRailFolders(entries, mergeSameName)
+                    val counts = countRows.associate { it.categoryId to it.itemCount }
+                    // A merged category is as full as its parts together.
+                    val effective = HashMap<Long, Int>(counts)
+                    merged.forEach { (primary, ids) ->
+                        effective[primary] = ids.sumOf { counts[it] ?: 0 }
+                    }
+                    val kept = if (hideEmpty) {
+                        grouped.filter { f -> f.categoryId == null || (effective[f.categoryId] ?: 0) > 0 }
+                    } else {
+                        grouped
+                    }
+                    _mergedGroups.value = merged
+                    c to railWithCatchup(b.catchup, b.builtIns) + kept.map { f ->
+                        LiveRailItem(
+                            key = f.categoryId?.let { LiveKey.Folder(it) } ?: LiveKey.Custom(f.customId!!),
+                            title = f.displayName, locked = f.locked, sealed = f.sealed,
+                            providerName = f.categoryId
+                                ?.let(categoriesById::get)
+                                ?.sourceId
+                                ?.let(b.sourceNames::get),
+                        )
+                    }
                 }
             }
         }
@@ -682,16 +719,28 @@ class LiveViewModel(
         .map { it.second }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), defaultRail)
 
+    /**
+     * The provider folders that share a name across the playlists, one group each: the first
+     * folder's id stands for the group and the list holds every id in it. Empty while merging is
+     * off, or when no name is shared.
+     */
+    private val _mergedGroups = MutableStateFlow<Map<Long, List<Long>>>(emptyMap())
+    val mergedGroups: StateFlow<Map<Long, List<Long>>> = _mergedGroups.asStateFlow()
+
     val channels: Flow<PagingData<ChannelEntity>> = combine(
-        _selected,
-        ctx,
-        _search.map { it.trim() }.debounce(300).distinctUntilChanged(),
-        sortMode,
+        combine(
+            _selected,
+            ctx,
+            _search.map { it.trim() }.debounce(300).distinctUntilChanged(),
+            sortMode,
+        ) { key, c, query, sort -> ChannelsArgs(key, c, query, sort) },
         custResolved.filterNotNull(),
-    ) { key, c, query, sort, cs -> Args(key, c, query, sort, cs) }
+    ) { args, cs -> Args(args.key, args.ctx, args.query, args.sort, cs) }
         // Rebuild the pager when a folder gains/loses manual order: the fast-path plain
         // PagingSource doesn't observe content_order, so the switch must recreate it.
         .combine(orderedContexts) { args, _ -> args }
+        // …and when the merging changes: a merged category is a different query.
+        .combine(mergedGroups) { args, _ -> args }
         .flatMapLatest { (key, c, query, sort, cs) ->
             // Customizations are applied to each fresh PagingData inside the pager chain — a PagingData
             // that the UI already collected must never be re-transformed (Paging forbids re-collection,
@@ -717,6 +766,9 @@ class LiveViewModel(
         .cachedIn(viewModelScope)
 
     private data class Args(val key: LiveKey, val ctx: Ctx, val query: String, val sort: SettingsRepository.SortMode, val cs: CustState)
+
+    /** The four plain inputs of the channel list, before the customizations are folded in. */
+    private data class ChannelsArgs(val key: LiveKey, val ctx: Ctx, val query: String, val sort: SettingsRepository.SortMode)
 
     /** Hide the focused channel from all lists (undo via Settings → Customize → Hidden channels). */
     fun hideChannel(channel: ChannelEntity) {
@@ -877,6 +929,17 @@ class LiveViewModel(
             // A sealed folder shows no count: how many channels it holds is the lock's business.
             val folders = channelDao.observeCountsByCategory(c.sourceIds.ifEmpty { listOf(-1L) })
                 .map { rows -> rows.filter { it.categoryId !in sealed }.associate { LiveKey.Folder(it.categoryId) as LiveKey to it.itemCount } }
+                // A merged category counts all its folders together, and the folders it folded in
+                // are no longer rows of their own.
+                .combine(mergedGroups) { map, merged ->
+                    val mutable = map.toMutableMap()
+                    merged.forEach { (primary, ids) ->
+                        val sum = ids.sumOf { id -> mutable[LiveKey.Folder(id)] ?: 0 }
+                        mutable[LiveKey.Folder(primary)] = sum
+                        ids.filter { it != primary }.forEach { mutable.remove(LiveKey.Folder(it)) }
+                    }
+                    mutable
+                }
             combine(single + folders) { parts -> parts.fold(emptyMap<LiveKey, Int>()) { acc, m -> acc + m } }.throttleLatest()
         }
         .flatMapLatest { it }
@@ -2222,8 +2285,21 @@ class LiveViewModel(
         return if (preferred >= 0) profileDao.resolveExistingProfileId(preferred) else null
     }
 
-    private fun pagingSource(key: LiveKey, c: Ctx, query: String, sort: SettingsRepository.SortMode): PagingSource<Int, ChannelEntity> =
-        livePagingSource(
+    private fun pagingSource(key: LiveKey, c: Ctx, query: String, sort: SettingsRepository.SortMode): PagingSource<Int, ChannelEntity> {
+        // A merged category spans several provider folders, which core's one-folder-at-a-time
+        // queries cannot read: it gets its own paging source over the merged set.
+        val merged = (key as? LiveKey.Folder)?.let { mergedGroups.value[it.id] }
+        if (merged != null && merged.size > 1) {
+            return MergedFolderPagingSource(
+                categoryIds = merged,
+                channelDao = channelDao,
+                profileId = c.profileId,
+                contextKey = folderContextKeys.value[key.id].orEmpty(),
+                alpha = sort != SettingsRepository.SortMode.PLAYLIST,
+                query = query,
+            )
+        }
+        return livePagingSource(
             key = key,
             profileId = c.profileId,
             sourceIds = c.sourceIds,
@@ -2234,6 +2310,7 @@ class LiveViewModel(
             contextKey = { folderContextKeys.value[it] },
             hasManualOrder = { it in orderedContexts.value },
         )
+    }
 
     fun enterMoveMode(channel: ChannelEntity, key: LiveKey) {
         viewModelScope.launch {
@@ -2300,8 +2377,14 @@ class LiveViewModel(
         }
     }
 
-    private fun countFlow(key: LiveKey, c: Ctx, hiddenCats: Set<Long>, sealedCats: Set<Long>): Flow<Int> =
-        liveCountFlow(key, c.profileId, c.sourceIds, hiddenCats, channelDao, customCategoryDao, sealedCats)
+    private fun countFlow(key: LiveKey, c: Ctx, hiddenCats: Set<Long>, sealedCats: Set<Long>): Flow<Int> {
+        // A merged category is as full as its parts together.
+        val merged = (key as? LiveKey.Folder)?.let { mergedGroups.value[it.id] }
+        if (merged != null && merged.size > 1) {
+            return combine(merged.map { channelDao.countByCategory(it) }) { counts -> counts.sum() }
+        }
+        return liveCountFlow(key, c.profileId, c.sourceIds, hiddenCats, channelDao, customCategoryDao, sealedCats)
+    }
 
     internal companion object {
         const val ENGINE_TAG = "LiveEngine"

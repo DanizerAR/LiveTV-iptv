@@ -116,13 +116,6 @@ fun OwnTVShell(
     onSetZoom: (Int) -> Unit,
     fontCustomization: tv.own.owntv.core.theme.FontCustomization,
     onSetFontCustomization: (tv.own.owntv.core.theme.FontCustomization) -> Unit,
-    avatarId: Int,
-    onSetAvatar: (Int) -> Unit,
-    // The active profile's own picture, and the two things that can be done to it. Blank = none.
-    avatarPath: String = "",
-    onSetCustomAvatar: (java.io.File) -> Unit = {},
-    onClearCustomAvatar: () -> Unit = {},
-    profileName: String,
     sourceSummary: String?,
     playlists: List<tv.own.owntv.core.database.entity.SourceEntity> = emptyList(),
     selectedPlaylistIds: Set<Long> = emptySet(),
@@ -134,7 +127,6 @@ fun OwnTVShell(
     onDeepLinkConsumed: () -> Unit,
     isOffline: Boolean = false,
     onExitApp: () -> Unit,
-    onSwitchProfile: () -> Unit,
     modifier: Modifier = Modifier,
     // Called once the profile's start-up choice has been applied; the splash waits for it.
     onStartupSettled: () -> Unit = {},
@@ -166,12 +158,11 @@ fun OwnTVShell(
     val contentLtr = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Ltr
     val homeFirstRowFocus = remember { FocusRequester() }
     var showExit by remember { mutableStateOf(false) }
-    var showAvatarPicker by remember { mutableStateOf(false) }
-    var showAvatarChooser by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     // Held by the Activity-scoped ShellViewModel, so a recreation (a script-family language switch)
     // does not close a film that is playing.
     val shellVm = org.koin.androidx.compose.koinViewModel<ShellViewModel>()
+    val settingsVm = org.koin.androidx.compose.koinViewModel<tv.own.owntv.features.settings.SettingsViewModel>()
     var playerMode by shellVm.playerMode
     // Deep-link: the Guide's "Add EPG" button switches to Settings and opens EPG Sources → add.
     var openEpgAdd by remember { mutableStateOf(false) }
@@ -223,6 +214,14 @@ fun OwnTVShell(
     val railVm = org.koin.androidx.compose.koinViewModel<RailCountsViewModel>()
     val railCounts by railVm.counts.collectAsStateWithLifecycle()
     val railDetails by railVm.details.collectAsStateWithLifecycle()
+    // The Settings window is an overlay: the browse section behind it keeps drawing, and this is it.
+    val contentSection = if (selectedSection == MainSection.MORE || selectedSection == MainSection.SETTINGS) {
+        shellVm.lastBrowseSection.value
+    } else {
+        selectedSection
+    }
+    // Opens the Settings window on the list of sections.
+    val openSettingsWindow: () -> Unit = { onSelectSection(MainSection.MORE) }
     // Where ▶ out of the Stage rail returns to: the content, exactly as it was left.
     var homeEntry by remember { mutableStateOf<(() -> Boolean)?>(null) }
     // The guide's entry hook: the TV Guide, or Live TV in Guide view (null while Live TV shows its list).
@@ -860,9 +859,10 @@ fun OwnTVShell(
             RemoteShortcutAction.OPEN_GUIDE -> openShortcutSection(MainSection.EPG)
             RemoteShortcutAction.OPEN_SEARCH -> openShortcutSection(MainSection.SEARCH)
             RemoteShortcutAction.OPEN_SETTINGS -> openShortcutSection(MainSection.SETTINGS)
+            // There is no profile to switch to any more: the shortcut opens Settings instead.
             RemoteShortcutAction.OPEN_PROFILE_SWITCHER -> {
                 if (playerMode == PlayerMode.FULLSCREEN) dockPlayer()
-                onSwitchProfile()
+                openSettingsWindow()
             }
             RemoteShortcutAction.OPEN_PLAYLIST_SWITCHER -> {
                 if (playerMode == PlayerMode.FULLSCREEN) dockPlayer()
@@ -978,7 +978,6 @@ fun OwnTVShell(
     BackHandler {
         when {
             playerMode == PlayerMode.FULLSCREEN -> exitPlayer()
-            showAvatarPicker -> showAvatarPicker = false
             showPlaylistPicker -> showPlaylistPicker = false
             showExit -> showExit = false
             // Settings is reached through More now, so Back out of its root goes back there — one
@@ -1010,7 +1009,7 @@ fun OwnTVShell(
     var shortcutKeyCode by remember { mutableStateOf(android.view.KeyEvent.KEYCODE_UNKNOWN) }
     var shortcutLongFired by remember { mutableStateOf(false) }
     var shortcutHoldJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    val longPressBackArmed = playerMode == PlayerMode.MINI && !showExit && !showAvatarPicker && !showPlaylistPicker
+    val longPressBackArmed = playerMode == PlayerMode.MINI && !showExit && !showPlaylistPicker
     // Media keys (the third way in) act on the docked window wherever focus is — but only if nothing nearer
     // claimed them first, which is why this is a bubbling handler: a focused browse list still gets its
     // CH+/CH− paging, and the full-screen HUD still owns zapping.
@@ -1235,58 +1234,10 @@ fun OwnTVShell(
                         ),
                 ) {
                     when {
-                        // More — the hub the rail's last item opens. Settings is a row in it.
-                        selectedSection == MainSection.MORE -> tv.own.owntv.features.more.MoreScreen(
-                            profileName = profileName.ifBlank { stringResource(R.string.common_own_tv_user) },
-                            playlistLabel = playlistLabel,
-                            avatarId = avatarId,
-                            avatarPath = avatarPath,
-                            onSwitchProfile = onSwitchProfile,
-                            onPickAvatar = { showAvatarPicker = true },
-                            onOpenSettings = { group, search ->
-                                settingsStart = tv.own.owntv.features.shell.components.SettingsStart(group, search)
-                                onSelectSection(MainSection.SETTINGS)
-                            },
-                            // The same paths Home uses, so the engine ladder, resume and Continue all apply.
-                            onPlayChannel = { id -> scope.launch { if (liveVm.ensurePlayingByIdAsync(id)) openFullscreen(MainSection.LIVE_TV) } },
-                            onPlayMovie = { id, pos -> scope.launch { if (movieVm.playByIdAsync(id, pos) && !movieVm.externalPlayerOn.value) openFullscreen(MainSection.MOVIES) } },
-                            onPlayEpisode = { seriesId, epId, pos -> scope.launch { if (seriesVm.playFromHomeAsync(seriesId, epId, pos) && !seriesVm.externalPlayerOn.value) openFullscreen(MainSection.SERIES) } },
-                            onOpenSeries = { id -> seriesVm.openSeriesById(id); restoreFocus = true; onSelectSection(MainSection.SERIES) },
-                            onChildFocused = { focusedLayer = ShellLayer.CONTENT },
-                            onEntryHook = { moreEntry = it },
-                            restoreFocus = restoreFocus,
-                            onRestored = { restoreFocus = false },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .onFocusChanged { if (it.hasFocus) focusedLayer = ShellLayer.CONTENT }
-                                .focusGroup(),
-                        )
+                        // The Settings window is an overlay, drawn over this content further down:
+                        // the live picture keeps playing behind it.
 
-                        selectedSection == MainSection.SETTINGS -> tv.own.owntv.features.settings.lock.SettingsPinGate(onDismiss = { settingsStart = null; openEpgAdd = false; restoreFocus = true; onSelectSection(shellVm.sectionToLeaveLockedSettings()) }) { SettingsScreen(
-                            themeMode = themeMode,
-                            uiZoomPercent = uiZoomPercent,
-                            onSetZoom = onSetZoom,
-                            fontCustomization = fontCustomization,
-                            onSetFontCustomization = onSetFontCustomization,
-                            onOpenPlaylist = {},
-                            // Settings is reached through More now, so Back out of its root goes
-                            // back there rather than to the rail — one level out, not two.
-                            onBack = { restoreFocus = true; onSelectSection(MainSection.MORE) },
-                            openEpgAdd = openEpgAdd,
-                            onEpgAddConsumed = { openEpgAdd = false },
-                            start = settingsStart,
-                            onStartConsumed = { settingsStart = null },
-                            onOpenSportsTeam = { t ->
-                                sportsMatchRequests.pendingTeam.value = t
-                                onSelectSection(MainSection.SPORTS)
-                            },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .onFocusChanged { if (it.hasFocus) focusedLayer = ShellLayer.CONTENT }
-                                .focusGroup(),
-                        ) }
-
-                        selectedSection == MainSection.HOME -> HomeScreen(
+                        contentSection == MainSection.HOME -> HomeScreen(
                             vm = homeVm,
                             // Skip the fullscreen player when the global external-player toggle is on
                             // (mounting it spins up mpv even though playback went to the external app).
@@ -1345,7 +1296,7 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.SEARCH -> SearchScreen(
+                        contentSection == MainSection.SEARCH -> SearchScreen(
                             vm = searchVm,
                             liveVm = liveVm,
                             previewEnabled = playerMode == PlayerMode.NONE,
@@ -1383,7 +1334,7 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.LIVE_TV && liveView == tv.own.owntv.core.settings.SettingsRepository.LiveView.GUIDE -> EpgScreen(
+                        contentSection == MainSection.LIVE_TV && liveView == tv.own.owntv.core.settings.SettingsRepository.LiveView.GUIDE -> EpgScreen(
                             onPlayChannel = guidePlayChannel,
                             onPlayCatchup = guidePlayCatchup,
                             onAddEpg = { openEpgAdd = true; onSelectSection(MainSection.SETTINGS) },
@@ -1399,27 +1350,31 @@ fun OwnTVShell(
                                 .focusGroup(),
                         )
 
-                        selectedSection == MainSection.LIVE_TV -> LiveScreen(
+                        contentSection == MainSection.LIVE_TV -> LiveScreen(
                             onFullscreen = { openFullscreen() },
                             onOpenGuide = { liveVm.setLiveView(tv.own.owntv.core.settings.SettingsRepository.LiveView.GUIDE) },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
                             previewEnabled = playerMode == PlayerMode.NONE,
                             restoreFocus = restoreFocus,
                             onRestored = { restoreFocus = false },
+                            // The playlists this list merges, and the way to choose others.
+                            playlistLabel = if (playlists.size > 1) playlistLabel else null,
+                            onOpenPlaylistPicker = { showPlaylistPicker = true },
+                            // With the rail off, the categories panel carries the two buttons that
+                            // stay: Settings, and the Guide.
                             navDock = if (!railVisible) {
                                 {
-                                    tv.own.owntv.features.shell.components.ShellNavDock(
-                                        selected = selectedSection,
-                                        visibleSections = visibleSections,
-                                        onSelect = selectFromNav,
-                                        onShowRail = { tv.own.owntv.features.live.LiveUiStore.setRailVisible(true) },
+                                    tv.own.owntv.features.shell.components.ShellTopButtons(
+                                        section = MainSection.LIVE_TV,
+                                        onOpenSettings = { openSettingsWindow() },
+                                        onSwitchSection = { section -> onSelectSection(section) },
                                     )
                                 }
                             } else null,
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.MOVIES -> MoviesScreen(
+                        contentSection == MainSection.MOVIES -> MoviesScreen(
                             onFullscreen = { openFullscreen() },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
                             restoreFocus = restoreFocus,
@@ -1428,7 +1383,7 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.SERIES -> SeriesScreen(
+                        contentSection == MainSection.SERIES -> SeriesScreen(
                             onFullscreen = { openFullscreen() },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
                             restoreFocus = restoreFocus,
@@ -1437,7 +1392,7 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.DOWNLOADS -> DownloadsScreen(
+                        contentSection == MainSection.DOWNLOADS -> DownloadsScreen(
                             onFullscreen = { openFullscreen() },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
                             onOpenGuide = { onSelectSection(MainSection.EPG) },
@@ -1448,7 +1403,7 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.SPORTS -> tv.own.owntv.features.sports.SportsScreen(
+                        contentSection == MainSection.SPORTS -> tv.own.owntv.features.sports.SportsScreen(
                             onPlayChannel = { ch, zap -> scope.launch { if (liveVm.ensurePlayingByIdAsync(ch.id, zap)) openFullscreen(MainSection.LIVE_TV) } },
                             onAddPlaylist = { onSelectSection(MainSection.SETTINGS) },
                             onChildFocused = { focusedLayer = ShellLayer.CONTENT },
@@ -1458,7 +1413,7 @@ fun OwnTVShell(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        selectedSection == MainSection.EPG -> EpgScreen(
+                        contentSection == MainSection.EPG -> EpgScreen(
                             onFullscreen = { openFullscreen() },
                             onPlayChannel = guidePlayChannel,
                             onPlayCatchup = guidePlayCatchup,
@@ -1518,12 +1473,6 @@ fun OwnTVShell(
                 onSelect = selectFromNav,
                 count = { section -> railCounts[section]?.takeIf { it > 0 } },
                 detail = { section -> railDetail(section, railDetails) },
-                profileName = profileName.ifBlank { stringResource(R.string.common_own_tv_user) },
-                profileLine = stringResource(R.string.shell_rail_profile_line, playlistLabel),
-                onSwitchProfile = onSwitchProfile,
-                onPickAvatar = { showAvatarPicker = true },
-                avatarId = avatarId,
-                avatarPath = avatarPath,
                 selectedItemFocusRequester = sidebarFocus,
                 contentFocusRequester = contentAreaFocus,
                 enterContent = when (selectedSection) {
@@ -1531,7 +1480,6 @@ fun OwnTVShell(
                     MainSection.EPG, MainSection.LIVE_TV -> guideEntry
                     MainSection.MOVIES, MainSection.SERIES -> vodEntry
                     MainSection.DOWNLOADS -> downloadsEntry
-                    MainSection.MORE -> moreEntry
                     MainSection.SPORTS -> sportsEntry
                     else -> null
                 },
@@ -1540,12 +1488,14 @@ fun OwnTVShell(
                 onNowPlaying = enterNowPlaying,
             )
           }
-            if (!railVisible && selectedSection != MainSection.LIVE_TV && playerMode != PlayerMode.FULLSCREEN) {
-                tv.own.owntv.features.shell.components.ShellNavDock(
-                    selected = selectedSection,
-                    visibleSections = visibleSections,
-                    onSelect = selectFromNav,
-                    onShowRail = { tv.own.owntv.features.live.LiveUiStore.setRailVisible(true) },
+            // With the rail off, the two buttons that matter stay: Settings, and the other of the
+            // two live sections. On Live TV they sit in the categories panel; on the Guide they sit
+            // at the top right of the screen.
+            if (!railVisible && contentSection != MainSection.LIVE_TV && playerMode != PlayerMode.FULLSCREEN) {
+                tv.own.owntv.features.shell.components.ShellTopButtons(
+                    section = if (contentSection == MainSection.EPG) MainSection.EPG else MainSection.LIVE_TV,
+                    onOpenSettings = { openSettingsWindow() },
+                    onSwitchSection = { section -> onSelectSection(section) },
                     modifier = Modifier.align(Alignment.TopEnd).padding(top = 104.mpx, end = 64.mpx),
                 )
             }
@@ -2057,28 +2007,77 @@ fun OwnTVShell(
         }
       }
 
+    // The Settings window: an overlay on the live picture, with the sections (or one section) in it.
+    if (selectedSection == MainSection.MORE || selectedSection == MainSection.SETTINGS) {
+        val backdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
+        // The window opens with the focus on its first control, or the remote would go nowhere.
+        val groupsEntry = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(selectedSection) {
+            if (selectedSection != MainSection.MORE) return@LaunchedEffect
+            repeat(10) {
+                withFrameNanos { }
+                if (runCatching { groupsEntry.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+            }
+        }
+        tv.own.owntv.features.shell.components.SettingsOverlay(
+            backdrop = backdrop,
+            onBack = {
+                // A section inside the window goes back to the list of sections; from there, out.
+                if (selectedSection == MainSection.SETTINGS) {
+                    onSelectSection(MainSection.MORE)
+                } else {
+                    restoreFocus = true
+                    onSelectSection(shellVm.lastBrowseSection.value)
+                }
+            },
+        ) {
+            if (selectedSection == MainSection.SETTINGS) {
+                tv.own.owntv.features.settings.lock.SettingsPinGate(
+                    onDismiss = { settingsStart = null; openEpgAdd = false; restoreFocus = true; onSelectSection(shellVm.sectionToLeaveLockedSettings()) },
+                ) {
+                    SettingsScreen(
+                        themeMode = themeMode,
+                        uiZoomPercent = uiZoomPercent,
+                        onSetZoom = onSetZoom,
+                        fontCustomization = fontCustomization,
+                        onSetFontCustomization = onSetFontCustomization,
+                        onOpenPlaylist = {},
+                        // Back out of a section goes back to the list of sections.
+                        onBack = { onSelectSection(MainSection.MORE) },
+                        openEpgAdd = openEpgAdd,
+                        onEpgAddConsumed = { openEpgAdd = false },
+                        start = settingsStart,
+                        onStartConsumed = { settingsStart = null },
+                        onOpenSportsTeam = { t ->
+                            sportsMatchRequests.pendingTeam.value = t
+                            onSelectSection(MainSection.SPORTS)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            } else {
+                // The sections themselves: the whole of Settings, and nothing else.
+                val pinned by settingsVm.quickPinnedKeys.collectAsStateWithLifecycle()
+                tv.own.owntv.features.more.SettingsPage(
+                    entry = groupsEntry,
+                    pinned = pinned.size,
+                    onOpenGroup = { group ->
+                        settingsStart = tv.own.owntv.features.shell.components.SettingsStart(group, false)
+                        onSelectSection(MainSection.SETTINGS)
+                    },
+                    onSearch = {
+                        settingsStart = tv.own.owntv.features.shell.components.SettingsStart(null, true)
+                        onSelectSection(MainSection.SETTINGS)
+                    },
+                )
+            }
+        }
+    }
+
     // The Settings PIN before a long-press change, when the Settings lock asks for it.
     tv.own.owntv.features.settings.lock.MenuChangeGateHost()
     if (showExit) {
         ExitDialog(onConfirm = onExitApp, onDismiss = { showExit = false })
-    }
-    if (showAvatarPicker) {
-        AvatarPickerDialog(
-                selectedId = avatarId,
-                onSelect = onSetAvatar,
-                customPath = avatarPath,
-                onPickCustom = { showAvatarPicker = false; showAvatarChooser = true },
-                onClearCustom = { onClearCustomAvatar(); showAvatarPicker = false },
-                onDismiss = { showAvatarPicker = false },
-        )
-    }
-    if (showAvatarChooser) {
-        tv.own.owntv.features.profiles.ProfilePictureChooser(
-                hasImage = avatarPath.isNotBlank(),
-                onPicked = { file -> onSetCustomAvatar(file); showAvatarChooser = false },
-                onClear = { onClearCustomAvatar(); showAvatarChooser = false },
-                onDismiss = { showAvatarChooser = false },
-            )
     }
     if (showPlaylistPicker) {
         tv.own.owntv.ui.components.OwnTVPopup(onDismissRequest = { showPlaylistPicker = false }, stageLayout = true) {

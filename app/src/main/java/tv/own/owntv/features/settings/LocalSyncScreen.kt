@@ -197,7 +197,7 @@ fun LocalSyncScreen(
                     val sep = stringResource(R.string.content_epg_bits_separator)
                     paired.forEach { device ->
                         val rowFocus = remember(device.id) { FocusRequester() }
-                        tv.own.owntv.features.more.StageActionRow(
+                        tv.own.owntv.features.shell.components.StageActionRow(
                             height = 104.mpx,
                             focus = rowFocus,
                             onClick = { stepFocus.value = rowFocus; vm.chooseDevice(device) },
@@ -215,9 +215,9 @@ fun LocalSyncScreen(
                                 autoSyncLine(device, agreements[device.id], turnedOff[device.id], autoEvents[device.id]),
                             ).joinToString(sep),
                             actions = listOf(
-                                tv.own.owntv.features.more.RowAction(stringResource(R.string.settings_sync_now), OwnTVIcon.REFRESH) { stepFocus.value = rowFocus; vm.chooseDevice(device) },
-                                tv.own.owntv.features.more.RowAction(stringResource(R.string.local_auto_sync_title), OwnTVIcon.CLOCK) { stepFocus.value = rowFocus; autoSyncFor = device },
-                                tv.own.owntv.features.more.RowAction(stringResource(R.string.more_sync_unpair), OwnTVIcon.CLOSE) { vm.unpair(device) },
+                                tv.own.owntv.features.shell.components.RowAction(stringResource(R.string.settings_sync_now), OwnTVIcon.REFRESH) { stepFocus.value = rowFocus; vm.chooseDevice(device) },
+                                tv.own.owntv.features.shell.components.RowAction(stringResource(R.string.local_auto_sync_title), OwnTVIcon.CLOCK) { stepFocus.value = rowFocus; autoSyncFor = device },
+                                tv.own.owntv.features.shell.components.RowAction(stringResource(R.string.more_sync_unpair), OwnTVIcon.CLOSE) { vm.unpair(device) },
                             ),
                         )
                     }

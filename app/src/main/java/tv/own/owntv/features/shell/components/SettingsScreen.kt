@@ -181,6 +181,7 @@ fun SettingsScreen(
     var showVodLayout by remember { mutableStateOf(false) }
     var showNavigation by remember { mutableStateOf(false) }
     var showLiveLayout by remember { mutableStateOf(false) }
+    var showBackdrop by remember { mutableStateOf(false) }
     // The three Stage pickers (Live TV opens in, Programme reminders, Reminder time): their state, rows,
     // search entries and dialogs live outside this function, which sits at the JVM's 64 KB method limit.
     val stageSettings = remember { StageSettingsState() }
@@ -228,6 +229,7 @@ fun SettingsScreen(
     val animationsRowFocus = remember { FocusRequester() }
     val vodLayoutRowFocus = remember { FocusRequester() }
     val liveLayoutRowFocus = remember { FocusRequester() }
+    val backdropRowFocus = remember { FocusRequester() }
     val navigationRowFocus = remember { FocusRequester() }
     val startupRowFocus = remember { FocusRequester() }
     val livePreviewQuickFocus = remember { FocusRequester() }
@@ -261,7 +263,7 @@ fun SettingsScreen(
         }
         onStartConsumed()
     }
-    val anyDialogOpen = showZoom || showPopupSize || showTheme || showAccent || showUpdate || showCatchupTime || showCatchupSources || showCatchupSourceValue || showEpgOffset || showGuideDays || showAnimations || showStartup || showStartupChannelPicker || showAfrWarning || showLivePreviewPanelWarning || showBgImageChooser || showBgPicker || showAmbientGlow || showFocusHighlight || showBgRemote || showVodLayout || showNavigation || showLiveLayout || stageSettings.open != null || settingsLock.open
+    val anyDialogOpen = showZoom || showPopupSize || showTheme || showAccent || showUpdate || showCatchupTime || showCatchupSources || showCatchupSourceValue || showEpgOffset || showGuideDays || showAnimations || showStartup || showStartupChannelPicker || showAfrWarning || showLivePreviewPanelWarning || showBgImageChooser || showBgPicker || showAmbientGlow || showFocusHighlight || showBgRemote || showVodLayout || showNavigation || showLiveLayout || showBackdrop || stageSettings.open != null || settingsLock.open
     // When a dialog closes, restore focus to the row that opened it. NOTE: this restore crosses
     // INTO the root focus group from outside (the dialog), but onEnter does NOT fire for programmatic
     // requestsFocus (only for directional entry) — so dialogReturn must be cleared HERE, not in onEnter.
@@ -323,6 +325,9 @@ fun SettingsScreen(
     val startupChannel by settingsVm.startupChannel.collectAsStateWithLifecycle()
     val chNavEnabled by settingsVm.chNavEnabled.collectAsStateWithLifecycle()
     val railVisible by tv.own.owntv.features.live.LiveUiStore.railVisible.collectAsStateWithLifecycle()
+    val hideEmptyCategories by tv.own.owntv.features.live.LiveUiStore.hideEmptyCategories.collectAsStateWithLifecycle()
+    val mergeSameNameCategories by tv.own.owntv.features.live.LiveUiStore.mergeSameNameCategories.collectAsStateWithLifecycle()
+    val settingsBackdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
     val rememberLastLive by settingsVm.rememberLastLive.collectAsStateWithLifecycle()
     val rememberLastMovies by settingsVm.rememberLastMovies.collectAsStateWithLifecycle()
     val rememberLastSeries by settingsVm.rememberLastSeries.collectAsStateWithLifecycle()
@@ -478,7 +483,6 @@ fun SettingsScreen(
             chipTone = if (hdr) TileTone.PRIMARY else TileTone.SECONDARY,
             onClick = { settingsVm.setPreferSdr(!hdr) },
         ),
-        RootGroup("group_profile", stringResource(R.string.settings_profile_group), OwnTVIcon.PERSON, stringResource(R.string.settings_group_summary_profile)),
         RootGroup("group_sources", stringResource(R.string.settings_group_sources), OwnTVIcon.PLAYLIST, stringResource(R.string.settings_group_summary_sources)),
         RootRow(
             tabRowKey(SettingsTab.SOURCES), TileTone.PRIMARY, OwnTVIcon.PLAYLIST,
@@ -603,6 +607,15 @@ fun SettingsScreen(
             onClick = { tv.own.owntv.features.live.LiveUiStore.setRailVisible(!railVisible) },
         ),
         liveLayoutRootRow(settingsVm, liveLayoutRowFocus) { saveScroll(); dialogReturn = liveLayoutRowFocus; showLiveLayout = true },
+        RootRow(
+            "settings_backdrop", TileTone.SECONDARY, OwnTVIcon.PALETTE,
+            title = stringResource(R.string.settings_backdrop_title),
+            desc = stringResource(R.string.settings_backdrop_description),
+            chip = stringResource(backdropLabelRes(settingsBackdrop)),
+            chipTone = TileTone.SECONDARY,
+            focus = backdropRowFocus,
+            onClick = { saveScroll(); dialogReturn = backdropRowFocus; showBackdrop = true },
+        ),
         *stageLayoutRows(settingsVm, stageSettings) { saveScroll(); dialogReturn = it }.toTypedArray(),
         RootRow(
             tabRowKey(SettingsTab.PANEL_WIDTH), TileTone.PRIMARY, OwnTVIcon.PANEL_WIDTH,
@@ -648,6 +661,22 @@ fun SettingsScreen(
         RootGroup("group_picture", stringResource(R.string.settings_vp_cat_picture), OwnTVIcon.VIDEO, ""),
         RootGroup("group_sound", stringResource(R.string.settings_group_sound_subtitles), OwnTVIcon.HEADPHONES, ""),
         RootGroup("group_live", stringResource(R.string.settings_live_tv), OwnTVIcon.LIVE_TV, ""),
+        RootRow(
+            "live_hide_empty_categories", TileTone.SECONDARY, OwnTVIcon.LIST_GRID,
+            title = stringResource(R.string.settings_hide_empty_categories),
+            desc = stringResource(R.string.settings_hide_empty_categories_description),
+            chip = stringResource(if (hideEmptyCategories) R.string.common_on else R.string.common_off),
+            chipTone = if (hideEmptyCategories) TileTone.PRIMARY else TileTone.SECONDARY,
+            onClick = { tv.own.owntv.features.live.LiveUiStore.setHideEmptyCategories(!hideEmptyCategories) },
+        ),
+        RootRow(
+            "live_merge_categories", TileTone.SECONDARY, OwnTVIcon.LAYERS,
+            title = stringResource(R.string.settings_merge_categories),
+            desc = stringResource(R.string.settings_merge_categories_description),
+            chip = stringResource(if (mergeSameNameCategories) R.string.common_on else R.string.common_off),
+            chipTone = if (mergeSameNameCategories) TileTone.PRIMARY else TileTone.SECONDARY,
+            onClick = { tv.own.owntv.features.live.LiveUiStore.setMergeSameNameCategories(!mergeSameNameCategories) },
+        ),
         RootGroup("group_watching", stringResource(R.string.settings_group_watching_recording), OwnTVIcon.REC, ""),
         // No "Data" group: Backup and Local sync are places, not preferences,
         // and are More rows now; Clear history moved onto the History screen it acts on; the download
@@ -846,6 +875,16 @@ fun SettingsScreen(
             },
             menuLabelsSearchEntry(settingsVm) { saveScroll(); dialogReturn = searchFieldFocus; showNavigation = true },
             liveLayoutSearchEntry(settingsVm) { saveScroll(); dialogReturn = searchFieldFocus; showLiveLayout = true },
+            SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_backdrop_title), stringResource(R.string.settings_backdrop_description), OwnTVIcon.PALETTE, TileTone.SECONDARY,
+                chip = stringResource(backdropLabelRes(settingsBackdrop)), chipTone = TileTone.SECONDARY) { saveScroll(); dialogReturn = searchFieldFocus; showBackdrop = true },
+            SettingsSearchEntry(stringResource(R.string.settings_live_tv), stringResource(R.string.settings_hide_empty_categories), stringResource(R.string.settings_hide_empty_categories_description), OwnTVIcon.LIST_GRID, TileTone.SECONDARY,
+                chip = stringResource(if (hideEmptyCategories) R.string.common_on else R.string.common_off), chipTone = if (hideEmptyCategories) TileTone.PRIMARY else TileTone.SECONDARY) {
+                tv.own.owntv.features.live.LiveUiStore.setHideEmptyCategories(!hideEmptyCategories)
+            },
+            SettingsSearchEntry(stringResource(R.string.settings_live_tv), stringResource(R.string.settings_merge_categories), stringResource(R.string.settings_merge_categories_description), OwnTVIcon.LAYERS, TileTone.SECONDARY,
+                chip = stringResource(if (mergeSameNameCategories) R.string.common_on else R.string.common_off), chipTone = if (mergeSameNameCategories) TileTone.PRIMARY else TileTone.SECONDARY) {
+                tv.own.owntv.features.live.LiveUiStore.setMergeSameNameCategories(!mergeSameNameCategories)
+            },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_live_opens_in), stringResource(R.string.settings_search_keywords_live_opens_in), OwnTVIcon.LIVE_TV, TileTone.PRIMARY) { saveScroll(); dialogReturn = searchFieldFocus; stageSettings.open = StageSettingsDialog.LIVE_OPENS_IN },
             SettingsSearchEntry(stringResource(R.string.settings_group_sources), stringResource(R.string.settings_reminders), stringResource(R.string.settings_search_keywords_reminders), OwnTVIcon.BELL, TileTone.SECONDARY) { saveScroll(); dialogReturn = searchFieldFocus; stageSettings.open = StageSettingsDialog.REMINDERS },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_ch_paging), stringResource(R.string.settings_search_keywords_ch), OwnTVIcon.CH_NAV, TileTone.PRIMARY,
@@ -1006,9 +1045,6 @@ fun SettingsScreen(
             val all = n + if (group == SettingsGroup.WATCHING) 4 else 0
             pluralStringResource(R.plurals.settings_setting_count, all, all)
         }
-        group == SettingsGroup.PROFILE -> tv.own.owntv.features.settings.profileCount().let { n ->
-            pluralStringResource(R.plurals.settings_profile_count, n, n)
-        }
         else -> (selectedRows.size + if (group == SettingsGroup.APP) videoGroupCount(VideoGroup.DIAGNOSTICS, settingsVm) else 0).let { n ->
             pluralStringResource(R.plurals.settings_setting_count, n, n)
         }
@@ -1047,6 +1083,18 @@ fun SettingsScreen(
                     StageSearchResultRow(e.icon, e.group, e.title, e.chip, onClick = e.onClick)
                 }
                 group.video != null -> {
+                    // The group's own rows first (the Live TV category options), then its
+                    // playback rows.
+                    selectedRows.forEach { row ->
+                        RootRowStage(
+                            row,
+                            pinned = row.key in quickPinned,
+                            inQuick = false,
+                            extra = extras[row.key],
+                            onLongClick = { menuRow = row },
+                            focus = if (row.key == menuReturnKey) menuReturnFocus else null,
+                        )
+                    }
                     VideoPlayerGroupRows(
                         group.video, pageScroll,
                         openMiniPlayer = openMiniPlayer,
@@ -1054,7 +1102,6 @@ fun SettingsScreen(
                     )
                     if (group == SettingsGroup.WATCHING) tv.own.owntv.features.settings.RecordingSettingsRows(pageScroll)
                 }
-                group == SettingsGroup.PROFILE -> tv.own.owntv.features.settings.ProfileSettingsRows()
                 // Only Quick can be empty, and only because the user emptied it.
                 selectedRows.isEmpty() -> StageSettingsNote(stringResource(R.string.settings_quick_empty_title), stringResource(R.string.settings_quick_empty_hint))
                 else -> {
@@ -1147,6 +1194,7 @@ fun SettingsScreen(
     }
     if (showVodLayout) VodLayoutDialog(settingsVm, vodLayout, onClose = { showVodLayout = false })
     if (showLiveLayout) LiveLayoutDialog(settingsVm, onClose = { showLiveLayout = false })
+    if (showBackdrop) SettingsBackdropDialog(onClose = { showBackdrop = false })
     StageSettingsDialogHost(settingsVm, stageSettings)
     tv.own.owntv.features.settings.lock.SettingsLockDialogHost(settingsLock, settingsLockVm)
     if (showFocusHighlight) {
@@ -1367,6 +1415,28 @@ private fun liveLayoutSearchEntry(settingsVm: SettingsViewModel, onClick: () -> 
 private fun liveLayoutLabelRes(layout: tv.own.owntv.core.settings.SettingsRepository.LiveLayout): Int =
     if (layout == tv.own.owntv.core.settings.SettingsRepository.LiveLayout.SEPARATE) R.string.settings_vod_layout_separate
     else R.string.settings_live_layout_stage
+
+/** The name of the backdrop the Settings window is drawn on. */
+private fun backdropLabelRes(backdrop: tv.own.owntv.features.live.SettingsBackdrop): Int = when (backdrop) {
+    tv.own.owntv.features.live.SettingsBackdrop.DIM -> R.string.settings_backdrop_dim
+    tv.own.owntv.features.live.SettingsBackdrop.GLASS -> R.string.settings_backdrop_glass
+    tv.own.owntv.features.live.SettingsBackdrop.TRANSPARENT -> R.string.settings_backdrop_transparent
+}
+
+/** How much of the picture shows through the Settings window. */
+@Composable
+private fun SettingsBackdropDialog(onClose: () -> Unit) {
+    val store = tv.own.owntv.features.live.LiveUiStore
+    val current by store.settingsBackdrop.collectAsStateWithLifecycle()
+    tv.own.owntv.features.settings.PickerDialog(
+        title = stringResource(R.string.settings_backdrop_title),
+        subtitle = stringResource(R.string.settings_backdrop_description),
+        options = tv.own.owntv.features.live.SettingsBackdrop.entries.map { it.name to stringResource(backdropLabelRes(it)) },
+        selected = current.name,
+        onSelect = { store.setSettingsBackdrop(tv.own.owntv.features.live.SettingsBackdrop.valueOf(it)); onClose() },
+        onDismiss = onClose,
+    )
+}
 
 @Composable
 private fun LiveLayoutDialog(settingsVm: SettingsViewModel, onClose: () -> Unit) {

@@ -133,13 +133,6 @@ fun StageRail(
     onSelect: (MainSection) -> Unit,
     count: (MainSection) -> Int?,
     detail: @Composable (MainSection) -> String?,
-    profileName: String,
-    profileLine: String,
-    onSwitchProfile: () -> Unit,
-    onPickAvatar: () -> Unit,
-    /** The profile's drawn avatar (-1 = none) and its own picture (blank = none). */
-    avatarId: Int = -1,
-    avatarPath: String = "",
     selectedItemFocusRequester: FocusRequester,
     contentFocusRequester: FocusRequester,
     /** A screen's own way in, when it has one (Home returns to the exact control left from). */
@@ -294,7 +287,7 @@ fun StageRail(
             items.forEach { section ->
                 RailItem(
                     icon = section.stageIcon,
-                    label = stringResource(section.labelRes),
+                    label = stringResource(section.railLabelRes),
                     trailing = if (counts) count(section)?.let { NumberFormat.getIntegerInstance(LocalConfiguration.current.locales[0]).format(it) } else null,
                     detail = if (details) detail(section) else null,
                     open = shown,
@@ -305,10 +298,8 @@ fun StageRail(
                     modifier = if (section == focusSection) Modifier.focusRequester(selectedItemFocusRequester) else Modifier,
                 )
             }
-            // Full height: the profile sits at the bottom, after the last separator.
+            // Full height: the rail's items sit at the top, the rest of the column stays empty.
             if (full) Spacer(Modifier.weight(1f))
-            RailSeparator(shown)
-            RailProfile(shown, namesAlpha, profileName, profileLine.takeIf { counts }, avatarId, avatarPath, onSwitchProfile, onPickAvatar)
         }
     }
 }
@@ -323,7 +314,14 @@ internal val MainSection.stageIcon: OwnTVIcon
         MainSection.MOVIES -> OwnTVIcon.MOVIES
         MainSection.SERIES -> OwnTVIcon.SERIES
         MainSection.DOWNLOADS -> OwnTVIcon.DOWNLOADS
-        MainSection.MORE, MainSection.SETTINGS -> OwnTVIcon.TILES
+        MainSection.MORE, MainSection.SETTINGS -> OwnTVIcon.SETTINGS
+    }
+
+/** The name the rail shows. "More" was the hub; it is the Settings window now. */
+internal val MainSection.railLabelRes: Int
+    get() = when (this) {
+        MainSection.MORE, MainSection.SETTINGS -> tv.own.owntv.core.R.string.common_nav_settings
+        else -> labelRes
     }
 
 /** `.edge`: 7 × 150 at the screen edge, accent, glowing 22 px at 80% and 60 px at 35%, 90% opaque. */
@@ -437,43 +435,6 @@ private fun RailActiveDot(modifier: Modifier) {
                 drawCircle(accent)
             },
     )
-}
-
-/**
- * The profile: the 46 px avatar alone in the capsule, avatar + name when open, with "All playlists ·
- * switch ›" under it from Size Wide up ([line]). OK switches profile; a long press changes the avatar.
- */
-@Composable
-private fun RailProfile(open: Boolean, namesAlpha: () -> Float, name: String, line: String?, avatarId: Int, avatarPath: String, onSwitchProfile: () -> Unit, onPickAvatar: () -> Unit) {
-    val a = stageAccent
-    val initial = name.trim().take(1).uppercase().ifEmpty { "?" }
-    StageSurface(
-        onClick = onSwitchProfile,
-        onLongClick = onPickAvatar,
-        radius = if (open) 20.mpx else 23.mpx,
-        modifier = if (open) Modifier.padding(top = 4.mpx).fillMaxWidth().heightIn(min = 46.mpx) else Modifier.padding(top = 4.mpx).size(46.mpx),
-        // Alone in the capsule the avatar covers a fill, so it takes the ring instead.
-        focusStyle = if (open) StageFocus.FILLED else StageFocus.POSTER,
-        contentAlignment = if (open) Alignment.CenterStart else Alignment.Center,
-    ) { focused ->
-        if (!open) {
-            RailAvatar(initial, avatarId = avatarId, imagePath = avatarPath)
-            return@StageSurface
-        }
-        Row(
-            Modifier.padding(horizontal = 12.mpx),
-            horizontalArrangement = Arrangement.spacedBy(14.mpx),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RailAvatar(initial, avatarId = avatarId, imagePath = avatarPath)
-            Column(Modifier.graphicsLayer { alpha = namesAlpha() }) {
-                Text(name, style = stageText(19, 700), color = if (focused) a.onAccent else StageColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (line != null) {
-                    Text("$line ›", style = stageText(15, 400), color = if (focused) a.onAccent else StageColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-    }
 }
 
 /**

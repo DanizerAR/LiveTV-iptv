@@ -9,7 +9,6 @@ import tv.own.owntv.features.settings.VideoGroup
  */
 internal enum class SettingsGroup(val titleRes: Int, val video: VideoGroup? = null) {
     QUICK(R.string.settings_group_quick),
-    PROFILE(R.string.settings_group_profile),
     SOURCES(R.string.settings_group_sources),
     APPEARANCE(R.string.settings_group_appearance),
     LAYOUT(R.string.settings_group_layout),

@@ -279,10 +279,21 @@ class ShellViewModel(
     // The section Settings was opened from, for Back out of its PIN prompt.
     private var sectionBeforeSettings = MainSection.MORE
 
+    /**
+     * The browse section the Settings window was opened over. The window is an overlay on the live
+     * picture, so the picture stays behind it — this is what is behind it.
+     */
+    private val _lastBrowseSection = MutableStateFlow(MainSection.LIVE_TV)
+    val lastBrowseSection: StateFlow<MainSection> = _lastBrowseSection.asStateFlow()
+
     fun selectSection(section: MainSection) {
         val target = if (section in iptvSections) section else MainSection.LIVE_TV
         if (target == MainSection.SETTINGS && _selectedSection.value != MainSection.SETTINGS) {
             sectionBeforeSettings = _selectedSection.value
+        }
+        // The Settings window and More are overlays: the section behind them is remembered.
+        if (target != MainSection.SETTINGS && target != MainSection.MORE) {
+            _lastBrowseSection.value = target
         }
         _selectedSection.value = target
     }

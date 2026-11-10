@@ -107,6 +107,10 @@ fun LiveScreen(
     lockedKey: LiveKey? = null,
     /** Guide view (Live TV tool row): opens the TV Guide until an in-place guide exists. */
     onOpenGuide: () -> Unit = {},
+    /** The playlists this list merges; null = one playlist, nothing to choose. */
+    playlistLabel: String? = null,
+    /** Opens the playlist picker from the Live TV section itself. */
+    onOpenPlaylistPicker: () -> Unit = {},
     /** Section switcher shown in the categories header when the left rail is turned off. */
     navDock: (@Composable () -> Unit)? = null,
 ) {
@@ -127,6 +131,9 @@ fun LiveScreen(
     val providerNames by vm.providerNames.collectAsStateWithLifecycle()
     val railFocus = remember { FocusRequester() }
     val selectedKey by vm.selectedKey.collectAsStateWithLifecycle()
+    // A manual order is kept for a provider folder, a user's own category and the favourites —
+    // those are the lists whose channels can be moved around.
+    val canMoveSelected = selectedKey is LiveKey.Folder || selectedKey is LiveKey.Custom || selectedKey == LiveKey.Favorites
     val count by vm.count.collectAsStateWithLifecycle()
     val favoriteIds by vm.favoriteIds.collectAsStateWithLifecycle()
     val showChannelNumbers by vm.showChannelNumbers.collectAsStateWithLifecycle()
@@ -540,6 +547,17 @@ fun LiveScreen(
 
     // CH± in the categories moves the highlight only; OK picks.
     var catFocusIndex by remember { mutableStateOf<Int?>(null) }
+    // Moving the highlight over a category shows that category's channels: the list follows the
+    // highlight, so looking down the categories is looking down the channels. It waits a moment
+    // first, so a held ▼ does not reload the list on every row it passes.
+    LaunchedEffect(catFocusIndex, railItems) {
+        val idx = catFocusIndex ?: return@LaunchedEffect
+        val item = railItems.getOrNull(idx) ?: return@LaunchedEffect
+        if (item.sealed || item.key == selectedKey) return@LaunchedEffect
+        delay(220)
+        if (catFocusIndex != idx) return@LaunchedEffect
+        vm.select(item.key)
+    }
     // Browsing the categories (or the search field) keeps the preview playing, like a TV: only picking
     // another channel or leaving Live TV changes it.
     val categoriesModifier = Modifier
@@ -751,6 +769,15 @@ fun LiveScreen(
                             // ◀ Categories from the search field too, as from the rows (not while typing — a search that found nothing here may be in another category).
                             .onDpadLeft({ !searchEditing && lockedKey == null }) { openCategories() },
                     )
+                    // The playlists this list merges, and the way to choose others: the Live TV
+                    // section's own playlist switch, so it is never a hunt through the top bar.
+                    if (playlistLabel != null) {
+                        tv.own.owntv.ui.stage.StageTool(
+                            text = playlistLabel,
+                            icon = OwnTVIcon.PLAYLIST,
+                            onClick = onOpenPlaylistPicker,
+                        )
+                    }
                     tv.own.owntv.ui.stage.StageTool(
                         text = null,
                         icon = OwnTVIcon.SORT,
@@ -910,6 +937,13 @@ fun LiveScreen(
                 previewEngine = vm.previewEngine,
                 showVideo = effectivePreview && (!previewOnOk || paneChannel != null),
                 singleSessionBlocked = previewBlockedSingleSession,
+                // The pane acts on the highlighted channel — the one whose now/next it shows.
+                isFavorite = previewChannel?.let { favoriteIds.contains(it.id) } == true,
+                onToggleFavorite = previewChannel?.let { ch -> { vm.toggleFavorite(ch) } },
+                onMove = previewChannel?.takeIf { canMoveSelected }?.let { ch ->
+                    { enteringMoveMode = true; vm.enterMoveMode(ch, selectedKey) }
+                },
+                onCatchup = previewChannel?.takeIf { it.catchup }?.let { ch -> { catchupChannel = ch } },
                 modifier = Modifier
                     .padding(start = screenW - margin - stageW, top = 120.mpx)
                     .width(stageW),
@@ -1028,7 +1062,7 @@ fun LiveScreen(
             isFavorite = favoriteIds.contains(ch.id),
             epgMatchManual = vm.currentEpgMatch(ch) != null,
             epgShiftMinutes = vm.currentEpgShift(ch),
-            canMove = selectedKey is LiveKey.Folder || selectedKey is LiveKey.Custom || selectedKey == LiveKey.Favorites,
+            canMove = canMoveSelected,
             isHistory = selectedKey == LiveKey.History,
             onToggleFavorite = { vm.toggleFavorite(ch); contextChannel = null },
             onRename = { renaming = ch; contextChannel = null },

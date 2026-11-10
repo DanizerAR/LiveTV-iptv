@@ -415,9 +415,13 @@ fun androidx.compose.foundation.layout.ColumnScope.PanelChoices(picker: PanelPic
     val search = remember { FocusRequester() }
     val list = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (selIndex - 2).coerceAtLeast(0))
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        // The list is composed in the frame the row is clicked; focus it once it is placed.
-        kotlinx.coroutines.delay(60)
-        runCatching { (if (picker.searchable) search else first).requestFocus() }
+        // The list is composed in the frame the row is clicked; focus it once it is placed. It can
+        // take a couple of frames more when the page it sits in has just been drawn (the Settings
+        // window over the live picture), so the request is repeated until it lands.
+        repeat(10) {
+            kotlinx.coroutines.delay(60)
+            if (runCatching { (if (picker.searchable) search else first).requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+        }
     }
     SettingPanelHeading(stringResource(R.string.settings_panel_choices))
     Column(

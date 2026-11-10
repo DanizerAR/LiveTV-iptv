@@ -468,12 +468,6 @@ open class MainActivity : ComponentActivity() {
                                 onSetZoom = viewModel::setUiZoom,
                                 fontCustomization = fontCustomization,
                                 onSetFontCustomization = viewModel::setFontCustomization,
-                                avatarId = avatarId,
-                                onSetAvatar = viewModel::setAvatar,
-                                avatarPath = avatarPath,
-                                onSetCustomAvatar = { file -> viewModel.setCustomAvatar(file) },
-                                onClearCustomAvatar = viewModel::clearCustomAvatar,
-                                profileName = profileName,
                                 sourceSummary = sourceSummary,
                                 playlists = playlists,
                                 selectedPlaylistIds = selectedPlaylistIds,
@@ -486,14 +480,6 @@ open class MainActivity : ComponentActivity() {
                                 isOffline = !isOnline,
                                 onExitApp = { finish() },
                                 onStartupSettled = { startupSettled = true },
-                                onSwitchProfile = {
-                                    // Stop playback and return to the "Who's watching?" gate — no app restart.
-                                    tv.own.owntv.features.profiles.stopPlaybackForProfileGate(shellViewModel, engines)
-                                    // Force the gate open even with a single unpinned profile (cold-start gate would
-                                    // skip it). requestSwitchProfile() clears the active profile
-                                    // authentication and raises the request.
-                                    gateSession.requestSwitchProfile()
-                                },
                                 modifier = Modifier.fillMaxSize(),
                             )
                             // No unexpected combination of asynchronous state may fall through to

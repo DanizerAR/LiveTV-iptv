@@ -83,6 +83,7 @@ import tv.own.owntv.ui.stage.StageSheetItem
 import tv.own.owntv.ui.stage.StageSpecChip
 import tv.own.owntv.ui.stage.StageSurface
 import tv.own.owntv.ui.stage.StageTag
+import tv.own.owntv.ui.stage.StageTool
 import tv.own.owntv.ui.stage.drawBoxShadow
 import tv.own.owntv.ui.stage.drawInnerRing
 import tv.own.owntv.ui.stage.stageGlass
@@ -245,6 +246,12 @@ internal fun LiveStagePane(
     showVideo: Boolean,
     singleSessionBlocked: Boolean,
     modifier: Modifier = Modifier,
+    /** The highlighted channel is a favourite (the heart is filled). */
+    isFavorite: Boolean = false,
+    /** What the pane can do with the channel it shows. Null = the action is not offered. */
+    onToggleFavorite: (() -> Unit)? = null,
+    onMove: (() -> Unit)? = null,
+    onCatchup: (() -> Unit)? = null,
 ) {
     val previewState by previewEngine.state.collectAsStateWithLifecycle()
     val streamChips by previewEngine.streamChips.collectAsStateWithLifecycle()
@@ -336,6 +343,28 @@ internal fun LiveStagePane(
                 ) {
                     LiveScheduleItem(next, accentTime = true)
                     if (later != null) LiveScheduleItem(later, accentTime = false)
+                }
+            }
+            // What can be done with this channel, right where its picture and its now/next are.
+            if (onToggleFavorite != null || onMove != null || onCatchup != null) {
+                Row(
+                    Modifier.padding(top = 20.mpx),
+                    horizontalArrangement = Arrangement.spacedBy(10.mpx),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    onToggleFavorite?.let {
+                        StageTool(
+                            text = stringResource(if (isFavorite) R.string.content_remove_favourite else R.string.content_add_favourite),
+                            icon = OwnTVIcon.FAVORITE,
+                            onClick = it,
+                        )
+                    }
+                    onMove?.let {
+                        StageTool(text = stringResource(R.string.content_move), icon = OwnTVIcon.MOVE, onClick = it)
+                    }
+                    onCatchup?.let {
+                        StageTool(text = stringResource(R.string.content_catchup), icon = OwnTVIcon.REWIND, onClick = it)
+                    }
                 }
             }
         }
@@ -521,19 +550,8 @@ internal fun LiveCategories(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(sheetTitle, style = stageText(26, 800), color = StageColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (headerActions != null) {
-                    Box(Modifier.padding(start = 12.mpx)) { headerActions() }
-                } else {
-                    Text(sheetHint, style = stageText(17, 400), color = StageColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.mpx))
-                }
+                Text(sheetHint, style = stageText(17, 400), color = StageColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.mpx))
             }
-        } else if (headerActions != null) {
-            // The categories column has no title row of its own; the dock sits where a title would go.
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 10.mpx),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) { headerActions() }
         }
         // Edge-only scrolling, as the channel list (no double step on ▼).
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides edgeScrollSpec) {
@@ -563,20 +581,33 @@ internal fun LiveCategories(
             contentPadding = PaddingValues(start = 4.mpx, end = 4.mpx, top = 4.mpx, bottom = 8.mpx),
         ) {
             item(key = "__search__") {
-                StageSearchField(
-                    query = query,
-                    onQueryChange = setQuery,
-                    placeholder = stringResource(R.string.content_search_categories).trimEnd('…'),
-                    onEditingChange = onSearchEditingChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = if (sheet) 8.mpx else 0.mpx, end = if (sheet) 8.mpx else 0.mpx, bottom = if (sheet) 14.mpx else 16.mpx)
-                        .focusRequester(searchFocus)
-                        .then(if (query.isEmpty()) rightKey else Modifier),
-                    height = if (sheet) 54.mpx else 48.mpx,
-                    radius = if (sheet) 16.mpx else 15.mpx,
-                    horizontalPadding = if (sheet) 16.mpx else 18.mpx,
-                )
+                // The search and the panel's own buttons share one row: the buttons sit at the top
+                // right, beside the search, where a thumb on the remote expects them — and inside
+                // the list, so ▲ and ▼ reach them.
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.mpx),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StageSearchField(
+                        query = query,
+                        onQueryChange = setQuery,
+                        placeholder = stringResource(R.string.content_search_categories).trimEnd('…'),
+                        onEditingChange = onSearchEditingChange,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = if (sheet) 8.mpx else 0.mpx, end = if (sheet) 8.mpx else 0.mpx, bottom = if (sheet) 14.mpx else 16.mpx)
+                            .focusRequester(searchFocus)
+                            // With buttons beside it, ▶ goes to them; without, it goes to the channels.
+                            .then(if (query.isEmpty() && headerActions == null) rightKey else Modifier),
+                        height = if (sheet) 54.mpx else 48.mpx,
+                        radius = if (sheet) 16.mpx else 15.mpx,
+                        horizontalPadding = if (sheet) 16.mpx else 18.mpx,
+                    )
+                    if (headerActions != null) {
+                        Box(Modifier.padding(bottom = if (sheet) 14.mpx else 16.mpx)) { headerActions() }
+                    }
+                }
             }
             visible.forEachIndexed { pos, index ->
                 val entry = entries[index]
