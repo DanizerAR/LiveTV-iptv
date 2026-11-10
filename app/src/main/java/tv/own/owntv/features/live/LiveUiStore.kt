@@ -7,10 +7,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * How the Settings window dims what is behind it. The window is an overlay on top of the live
- * picture, so how much of that picture shows through is the user's call.
+ * How the Settings window dims what is behind it: [dim] is how much black sits over the picture
+ * (100 = opaque black, 0 = the picture untouched), and [glass] adds the window's frosted surface.
  */
-enum class SettingsBackdrop { DIM, GLASS, TRANSPARENT }
+data class SettingsBackdrop(val dim: Int, val glass: Boolean)
 
 /**
  * Device-wide choices that only this live-TV build needs and core's settings store does not know:
@@ -31,6 +31,8 @@ object LiveUiStore {
     private const val KEY_HIDE_EMPTY = "hide_empty_categories"
     private const val KEY_MERGE_SAME_NAME = "merge_same_name_categories"
     private const val KEY_BACKDROP = "settings_backdrop"
+    private const val KEY_BACKDROP_DIM = "settings_backdrop_dim"
+    private const val KEY_BACKDROP_GLASS = "settings_backdrop_glass"
 
     private lateinit var prefs: android.content.SharedPreferences
 
@@ -51,7 +53,7 @@ object LiveUiStore {
     private val _mergeSameNameCategories = MutableStateFlow(false)
     val mergeSameNameCategories: StateFlow<Boolean> = _mergeSameNameCategories.asStateFlow()
 
-    private val _settingsBackdrop = MutableStateFlow(SettingsBackdrop.DIM)
+    private val _settingsBackdrop = MutableStateFlow(SettingsBackdrop(dim = 78, glass = false))
     val settingsBackdrop: StateFlow<SettingsBackdrop> = _settingsBackdrop.asStateFlow()
 
     fun init(context: Context) {
@@ -62,9 +64,10 @@ object LiveUiStore {
         _threePanelSeeded.value = prefs.getBoolean(KEY_THREE_PANEL_SEEDED, false)
         _hideEmptyCategories.value = prefs.getBoolean(KEY_HIDE_EMPTY, false)
         _mergeSameNameCategories.value = prefs.getBoolean(KEY_MERGE_SAME_NAME, false)
-        _settingsBackdrop.value = runCatching {
-            SettingsBackdrop.valueOf(prefs.getString(KEY_BACKDROP, null) ?: SettingsBackdrop.DIM.name)
-        }.getOrDefault(SettingsBackdrop.DIM)
+        _settingsBackdrop.value = SettingsBackdrop(
+            dim = prefs.getInt(KEY_BACKDROP_DIM, 78).coerceIn(0, 100),
+            glass = prefs.getBoolean(KEY_BACKDROP_GLASS, false),
+        )
     }
 
     fun setRailVisible(visible: Boolean) {
@@ -96,9 +99,17 @@ object LiveUiStore {
         if (::prefs.isInitialized) prefs.edit { putBoolean(KEY_MERGE_SAME_NAME, merge) }
     }
 
-    fun setSettingsBackdrop(backdrop: SettingsBackdrop) {
-        _settingsBackdrop.value = backdrop
-        if (::prefs.isInitialized) prefs.edit { putString(KEY_BACKDROP, backdrop.name) }
+    /** How much black the window puts over the picture: 100 = opaque, 0 = the picture untouched. */
+    fun setSettingsBackdropDim(dim: Int) {
+        val clean = dim.coerceIn(0, 100)
+        _settingsBackdrop.value = _settingsBackdrop.value.copy(dim = clean)
+        if (::prefs.isInitialized) prefs.edit { putInt(KEY_BACKDROP_DIM, clean) }
+    }
+
+    /** The window's own frosted surface, over the dimming. */
+    fun setSettingsBackdropGlass(glass: Boolean) {
+        _settingsBackdrop.value = _settingsBackdrop.value.copy(glass = glass)
+        if (::prefs.isInitialized) prefs.edit { putBoolean(KEY_BACKDROP_GLASS, glass) }
     }
 
     private fun parseIds(raw: String?): Set<Long> =

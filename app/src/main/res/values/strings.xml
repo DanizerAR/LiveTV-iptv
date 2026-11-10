@@ -10,7 +10,8 @@
     <string name="settings_backdrop_title">Settings window background</string>
     <string name="settings_backdrop_description">How much of the picture shows through the Settings window.</string>
     <string name="settings_backdrop_dim">Dim</string>
-    <string name="settings_backdrop_glass">Glass</string>
+    <string name="settings_backdrop_glass">Glass panel</string>
+    <string name="settings_backdrop_glass_description">A frosted panel over the picture, under the dimming.</string>
     <string name="settings_backdrop_transparent">Transparent</string>
     <string name="settings_hide_empty_categories">Hide empty categories</string>
     <string name="settings_hide_empty_categories_description">A category with no channels left is not listed.</string>

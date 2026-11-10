@@ -211,6 +211,9 @@ fun OwnTVShell(
     val navHideAfterMs by settingsRepo.navHideAfterMs.collectAsStateWithLifecycle(
         initialValue = tv.own.owntv.core.settings.SettingsRepository.NavHideAfter.DEFAULT_MS,
     )
+    // The top-bar pills (last channel · provider): the content hands the focus to them, so they
+    // are focusable in every section and not only when the rail holds the focus.
+    val statusPillsFocus = remember { FocusRequester() }
     val railVm = org.koin.androidx.compose.koinViewModel<RailCountsViewModel>()
     val railCounts by railVm.counts.collectAsStateWithLifecycle()
     val railDetails by railVm.details.collectAsStateWithLifecycle()
@@ -1357,9 +1360,13 @@ fun OwnTVShell(
                             previewEnabled = playerMode == PlayerMode.NONE,
                             restoreFocus = restoreFocus,
                             onRestored = { restoreFocus = false },
-                            // The playlists this list merges, and the way to choose others.
-                            playlistLabel = if (playlists.size > 1) playlistLabel else null,
+                            // The playlists this list merges, and the way to choose others. It is
+                            // there even with one playlist: that is where the playlist is chosen.
+                            playlistLabel = playlistLabel,
                             onOpenPlaylistPicker = { showPlaylistPicker = true },
+                            // ▶ on a channel row goes to the top-bar pills (last channel, provider),
+                            // not to a page.
+                            onFocusStatusPills = { runCatching { statusPillsFocus.requestFocus() } },
                             // With the rail off, the categories panel carries the two buttons that
                             // stay: Settings, and the Guide.
                             navDock = if (!railVisible) {
@@ -1457,7 +1464,8 @@ fun OwnTVShell(
                 playlistInteractive = playlists.size > 1,
                 onPlaylistClick = { showPlaylistPicker = true },
                 // Out of reach from deep in a list: from the rail or on Home only.
-                pillsFocusable = focusedLayer == ShellLayer.SIDEBAR || clusterFocused || selectedSection == MainSection.HOME,
+                pillsFocusable = true,
+                pillsFocusRequester = statusPillsFocus,
                 weatherInfo = weatherInfo,
                 weatherFahrenheit = weatherFahrenheit,
                 clockColors = clockColors,
@@ -1498,7 +1506,9 @@ fun OwnTVShell(
                     section = if (contentSection == MainSection.EPG) MainSection.EPG else MainSection.LIVE_TV,
                     onOpenSettings = { openSettingsWindow() },
                     onSwitchSection = { section -> onSelectSection(section) },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 104.mpx, end = 64.mpx),
+                    // Below the clock block: the clock, the date and the weather own the top right
+                    // corner, and the buttons used to land on top of them.
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 132.mpx, end = 64.mpx),
                 )
             }
           }

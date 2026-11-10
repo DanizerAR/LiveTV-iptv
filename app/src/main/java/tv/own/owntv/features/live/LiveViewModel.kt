@@ -377,6 +377,9 @@ class LiveViewModel(
     private val _search = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _search.asStateFlow()
 
+    /** Until when the preview ignores the list's focus (a category was only hovered over). */
+    private var previewHeldUntil = 0L
+
     private val _previewChannel = MutableStateFlow<ChannelEntity?>(null)
     val previewChannel: StateFlow<ChannelEntity?> = _previewChannel.asStateFlow()
 
@@ -1105,8 +1108,24 @@ class LiveViewModel(
     }
 
     fun onChannelFocused(channel: ChannelEntity) {
+        // The list followed the highlight over a category: the preview keeps playing what it was
+        // playing. Re-tuning the stream for every category the highlight passes costs a request and
+        // a decode, and the channel being watched has not changed.
+        if (android.os.SystemClock.elapsedRealtime() < previewHeldUntil) return
         _previewArmed.value = true // a real user focus — the in-pane preview may now play
         browseTo(channel)
+    }
+
+    /**
+     * The highlight moved over a category: the list follows it, the preview does not.
+     *
+     * The category is not remembered as the user's pick (they did not choose it) and the preview
+     * is held for a moment, so the list can settle without the picture changing under it.
+     */
+    fun selectForHover(key: LiveKey) {
+        if (lockedKey != null) return
+        previewHeldUntil = android.os.SystemClock.elapsedRealtime() + PREVIEW_HOLD_MS
+        _selected.value = key
     }
 
     /** Search's "Go to channel": the list scrolls to [reveal] and focuses it, then calls [revealDone]. */
@@ -2388,6 +2407,9 @@ class LiveViewModel(
 
     internal companion object {
         const val ENGINE_TAG = "LiveEngine"
+
+        /** How long the preview keeps playing while the list follows a hovered category. */
+        const val PREVIEW_HOLD_MS = 1_200L
 
         /** How long a channel must stay tuned before it counts as watched — see [recordLiveHistory]. */
         const val HISTORY_DEBOUNCE_MS = 5_000L

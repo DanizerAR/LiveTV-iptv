@@ -108,7 +108,12 @@ android {
     productFlavors {
         create("standard") {
             dimension = "abi"
-            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+            // One device, one ABI: -PowntvAbis=arm64-v8a builds a single-ABI APK (the native
+            // libraries are ~23 MB per ABI). The default still ships both arm ABIs, so the
+            // published flavor keeps covering the 32-bit Shield TV.
+            val singleAbis = providers.gradleProperty("owntvAbis").orNull
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ndk { abiFilters += singleAbis ?: listOf("arm64-v8a", "armeabi-v7a") }
         }
         create("x86_64") {
             dimension = "abi"
@@ -174,6 +179,10 @@ android {
             )
             if (releaseKeystore != null) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                // No release key on this machine: sign with the debug key, so the APK is
+                // installable (and installs straight over a debug-signed build).
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
@@ -197,6 +206,10 @@ android {
     lint {
         // CI gates on this (see .github/workflows/android.yml), so an error must mean something.
         abortOnError = true
+        // A low-memory machine (the phone this is built on) cannot run lint's analyser inside the
+        // Gradle JVM — it dies in metaspace. -Powntv.skipLint=true turns the release gate off for
+        // a local build; CI never sets it.
+        checkReleaseBuilds = providers.gradleProperty("owntv.skipLint").orNull != "true"
         warningsAsErrors = false
         // A counted sentence must use Android plural resources; keep this invariant fatal so a new
         // extraction cannot reintroduce English-only quantity wording.

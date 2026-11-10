@@ -252,6 +252,11 @@ internal fun LiveStagePane(
     onToggleFavorite: (() -> Unit)? = null,
     onMove: (() -> Unit)? = null,
     onCatchup: (() -> Unit)? = null,
+    /**
+     * The programme details, shown under the picture instead of the now/next block. The details
+     * belong to the channel in the pane, so they are read there rather than on a page of their own.
+     */
+    details: (@Composable () -> Unit)? = null,
 ) {
     val previewState by previewEngine.state.collectAsStateWithLifecycle()
     val streamChips by previewEngine.streamChips.collectAsStateWithLifecycle()
@@ -315,6 +320,11 @@ internal fun LiveStagePane(
         }
         val now = nowNext?.now
         Column(Modifier.fillMaxWidth().padding(start = 4.mpx, end = 4.mpx, top = 34.mpx)) {
+            if (details != null) {
+                // The programme details take the pane's lower half; the picture stays on top.
+                Box(Modifier.fillMaxWidth().weight(1f, fill = false)) { details() }
+                return@Column
+            }
             if (now != null) {
                 Text(now.title, style = stageText(42, 800, (-0.5).mpxSp), color = StageColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(

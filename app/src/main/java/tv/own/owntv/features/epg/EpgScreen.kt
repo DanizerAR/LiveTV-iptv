@@ -529,7 +529,6 @@ fun EpgScreen(
                 )
             }
             // The key hints at the bottom right of the top area, level with the video's bottom edge.
-            Box(Modifier.align(Alignment.BottomEnd)) { GuideKeyHints(cellMode = inCellMode && gridHasFocus) }
         }
 
         }
@@ -984,27 +983,3 @@ private fun GuideEmpty(title: String, body: String? = null, action: String? = nu
     }
 }
 
-/**
- * How to move, under the programme beside the video (in place of action buttons,
- * which could not be reached without leaving the channel — they are all in Hold OK's menu). At row level:
- * OK Browse · ▲▼ Channels · ◀ Menu · Hold OK Options; inside a row: OK Watch · ◀ ▶ Programs · Back Channels.
- */
-@Composable
-private fun GuideKeyHints(cellMode: Boolean) {
-    val hints = if (cellMode) {
-        listOf(
-            stringResource(R.string.common_ok) to stringResource(R.string.content_key_watch),
-            "◀ ▶" to stringResource(R.string.content_key_programmes),
-            stringResource(R.string.common_back) to stringResource(R.string.content_key_channels),
-            stringResource(R.string.content_key_hold_ok) to stringResource(R.string.content_key_options),
-        )
-    } else {
-        listOf(
-            stringResource(R.string.common_ok) to stringResource(R.string.content_key_browse),
-            "▲ ▼" to stringResource(R.string.content_key_channels),
-            "◀" to stringResource(R.string.content_key_menu),
-            stringResource(R.string.content_key_hold_ok) to stringResource(R.string.content_key_options),
-        )
-    }
-    tv.own.owntv.ui.stage.StageKeyHints(hints)
-}

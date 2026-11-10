@@ -111,6 +111,8 @@ fun LiveScreen(
     playlistLabel: String? = null,
     /** Opens the playlist picker from the Live TV section itself. */
     onOpenPlaylistPicker: () -> Unit = {},
+    /** Hands the focus to the top-bar pills (last channel, provider). */
+    onFocusStatusPills: () -> Unit = {},
     /**
      * Section switcher shown beside the category search when the left rail is turned off. The slot
      * is handed the panel's focus requesters: the first button, and the search field to come back to.
@@ -550,6 +552,9 @@ fun LiveScreen(
 
     // CH± in the categories moves the highlight only; OK picks.
     var catFocusIndex by remember { mutableStateOf<Int?>(null) }
+    // Whether the tool row (search, playlist, sort, guide) holds the focus: from there ▲ may leave
+    // the pane for the top-bar pills.
+    var toolRowFocused by remember { mutableStateOf(false) }
     // Moving the highlight over a category shows that category's channels: the list follows the
     // highlight, so looking down the categories is looking down the channels. It waits a moment
     // first, so a held ▼ does not reload the list on every row it passes.
@@ -557,9 +562,11 @@ fun LiveScreen(
         val idx = catFocusIndex ?: return@LaunchedEffect
         val item = railItems.getOrNull(idx) ?: return@LaunchedEffect
         if (item.sealed || item.key == selectedKey) return@LaunchedEffect
-        delay(220)
+        // Long enough that a held ▼ does not reload the list on every row it passes, and short
+        // enough that the list still feels like it follows the highlight.
+        delay(320)
         if (catFocusIndex != idx) return@LaunchedEffect
-        vm.select(item.key)
+        vm.selectForHover(item.key)
     }
     // Browsing the categories (or the search field) keeps the preview playing, like a TV: only picking
     // another channel or leaving Live TV changes it.
@@ -616,12 +623,6 @@ fun LiveScreen(
         val margin = fx(64)
         val row = screenW - margin * 2
         val previewShown = if (separate) panelShares?.preview != 0 else stageWidths?.preview != 0
-        val liveHints = listOf(
-            stringResource(R.string.common_ok) to stringResource(R.string.content_key_watch),
-            "◀" to stringResource(R.string.content_category_browser_title),
-            "▶" to stringResource(R.string.content_programme_details),
-            stringResource(R.string.content_key_hold_ok) to stringResource(R.string.content_key_options),
-        )
         val gapCat = fx(26)
         val gapStage = if (separate) fx(30) else fx(34)
         val colW: Dp
@@ -746,7 +747,10 @@ fun LiveScreen(
                             when (requestedFocusDirection) {
                                 // The rows handle ◀ and ▶ themselves; from the tool row neither leaves the pane.
                                 FocusDirection.Left, FocusDirection.Right -> cancelFocusChange()
-                                FocusDirection.Up, FocusDirection.Down -> if (lockedKey == null) cancelFocusChange()
+                                // ▲ from the tool row goes up to the top-bar pills (last channel,
+                                // provider) — that is the only way to reach them from here.
+                                FocusDirection.Up -> if (lockedKey == null && !toolRowFocused) cancelFocusChange()
+                                FocusDirection.Down -> if (lockedKey == null) cancelFocusChange()
                                 else -> Unit
                             }
                         }
@@ -756,7 +760,8 @@ fun LiveScreen(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.mpx),
-                    modifier = Modifier.padding(start = 4.mpx).focusGroup(),
+                    modifier = Modifier.padding(start = 4.mpx).focusGroup()
+                        .onFocusChanged { toolRowFocused = it.hasFocus },
                 ) {
                     tv.own.owntv.ui.stage.StageSearchField(
                         query = searchQuery,
@@ -876,8 +881,13 @@ fun LiveScreen(
                                                 lockedKey != null -> false
                                                 else -> { openCategories(); true }
                                             }
-                                            // ▶ or the remote's Info key: this channel's Program details page.
-                                            androidx.compose.ui.input.key.Key.DirectionRight, androidx.compose.ui.input.key.Key.Info -> {
+                                            // ▶ goes to the top-bar pills (last channel, provider) —
+                                            // the panel on the right of the list is not a page.
+                                            androidx.compose.ui.input.key.Key.DirectionRight -> {
+                                                onFocusStatusPills(); true
+                                            }
+                                            // The remote's Info key still opens the Program details page.
+                                            androidx.compose.ui.input.key.Key.Info -> {
                                                 contextChannelId = channel.id; programmeDetails = channel; true
                                             }
                                             // ▲/▼ step by row number, not by focus search: a held key outran the
@@ -907,23 +917,6 @@ fun LiveScreen(
                     }
                     }
                 }
-                // With the preview off the hints stay under the list, where there is nothing else to hold them.
-                if (lockedKey == null && !previewShown) {
-                    tv.own.owntv.ui.stage.StageKeyHints(
-                        liveHints,
-                        // A clear gap under the list, and 40 from the bottom rather than the design's 26:
-                        // TV panels overscan the very edge away.
-                        modifier = Modifier.padding(start = 16.mpx, top = 22.mpx, bottom = 40.mpx),
-                    )
-                }
-            }
-
-            // Under the preview, bottom right, so the list runs down to the bottom edge.
-            if (lockedKey == null && previewShown) {
-                tv.own.owntv.ui.stage.StageKeyHints(
-                    liveHints,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = margin, bottom = 40.mpx),
-                )
             }
         }
 
@@ -947,9 +940,36 @@ fun LiveScreen(
                     { enteringMoveMode = true; vm.enterMoveMode(ch, selectedKey) }
                 },
                 onCatchup = previewChannel?.takeIf { it.catchup }?.let { ch -> { catchupChannel = ch } },
+                // The programme details live under the picture, not on a page of their own.
+                details = programmeDetails?.let { ch ->
+                    {
+                        val epgVm: tv.own.owntv.features.epg.EpgViewModel = koinViewModel()
+                        tv.own.owntv.features.epg.ProgrammeDetailsPanel(
+                            vm = epgVm,
+                            channel = ch,
+                            onWatch = { vm.watchFullscreen(ch, emptyList()); if (!externalPlayerOn) onFullscreen() },
+                            onPlayFromStart = { p -> vm.playCatchupProgramme(ch, p); if (!externalPlayerOn) onFullscreen() },
+                            onClose = { programmeDetails = null },
+                        )
+                    }
+                },
                 modifier = Modifier
                     .padding(start = screenW - margin - stageW, top = 120.mpx)
                     .width(stageW),
+            )
+        }
+
+        // With the preview panel switched off there is nowhere for the details to live, so they
+        // open as a page of their own again.
+        programmeDetails?.takeIf { !previewShown }?.let { ch ->
+            val epgVm: tv.own.owntv.features.epg.EpgViewModel = koinViewModel()
+            tv.own.owntv.features.epg.ProgrammeDayPage(
+                vm = epgVm,
+                channel = ch,
+                focusStartMs = null,
+                onWatch = { vm.watchFullscreen(ch, emptyList()); if (!externalPlayerOn) onFullscreen() },
+                onPlayFromStart = { p -> vm.playCatchupProgramme(ch, p); if (!externalPlayerOn) onFullscreen() },
+                onDismiss = { programmeDetails = null; scope.launch { restoreToContextRow() } },
             )
         }
 
@@ -978,17 +998,6 @@ fun LiveScreen(
         }
     }
 
-    programmeDetails?.let { ch ->
-        val epgVm: tv.own.owntv.features.epg.EpgViewModel = koinViewModel()
-        tv.own.owntv.features.epg.ProgrammeDayPage(
-            vm = epgVm,
-            channel = ch,
-            focusStartMs = null,
-            onWatch = { vm.watchFullscreen(ch, emptyList()); if (!externalPlayerOn) onFullscreen() },
-            onPlayFromStart = { p -> vm.playCatchupProgramme(ch, p); if (!externalPlayerOn) onFullscreen() },
-            onDismiss = { programmeDetails = null; scope.launch { restoreToContextRow() } },
-        )
-    }
     catchupChannel?.let { ch ->
         CatchupDialog(
             channelName = ch.name,

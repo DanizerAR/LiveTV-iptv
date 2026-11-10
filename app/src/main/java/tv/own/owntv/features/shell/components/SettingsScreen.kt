@@ -181,7 +181,6 @@ fun SettingsScreen(
     var showVodLayout by remember { mutableStateOf(false) }
     var showNavigation by remember { mutableStateOf(false) }
     var showLiveLayout by remember { mutableStateOf(false) }
-    var showBackdrop by remember { mutableStateOf(false) }
     // The three Stage pickers (Live TV opens in, Programme reminders, Reminder time): their state, rows,
     // search entries and dialogs live outside this function, which sits at the JVM's 64 KB method limit.
     val stageSettings = remember { StageSettingsState() }
@@ -263,7 +262,7 @@ fun SettingsScreen(
         }
         onStartConsumed()
     }
-    val anyDialogOpen = showZoom || showPopupSize || showTheme || showAccent || showUpdate || showCatchupTime || showCatchupSources || showCatchupSourceValue || showEpgOffset || showGuideDays || showAnimations || showStartup || showStartupChannelPicker || showAfrWarning || showLivePreviewPanelWarning || showBgImageChooser || showBgPicker || showAmbientGlow || showFocusHighlight || showBgRemote || showVodLayout || showNavigation || showLiveLayout || showBackdrop || stageSettings.open != null || settingsLock.open
+    val anyDialogOpen = showZoom || showPopupSize || showTheme || showAccent || showUpdate || showCatchupTime || showCatchupSources || showCatchupSourceValue || showEpgOffset || showGuideDays || showAnimations || showStartup || showStartupChannelPicker || showAfrWarning || showLivePreviewPanelWarning || showBgImageChooser || showBgPicker || showAmbientGlow || showFocusHighlight || showBgRemote || showVodLayout || showNavigation || showLiveLayout || stageSettings.open != null || settingsLock.open
     // When a dialog closes, restore focus to the row that opened it. NOTE: this restore crosses
     // INTO the root focus group from outside (the dialog), but onEnter does NOT fire for programmatic
     // requestsFocus (only for directional entry) — so dialogReturn must be cleared HERE, not in onEnter.
@@ -596,6 +595,13 @@ fun SettingsScreen(
             focus = animationsRowFocus,
             onClick = { saveScroll(); dialogReturn = animationsRowFocus; showAnimations = true },
         ),
+        RootRow(
+            tabRowKey(SettingsTab.WEATHER), TileTone.SECONDARY, OwnTVIcon.WEATHER,
+            title = stringResource(R.string.settings_title_date_time_weather),
+            desc = stringResource(R.string.settings_line_custom_location),
+            focus = rowFocus.getValue(SettingsTab.WEATHER),
+            onClick = { open(SettingsTab.WEATHER) },
+        ),
         RootGroup("group_layout", stringResource(R.string.settings_group_layout), OwnTVIcon.LIST_GRID, stringResource(R.string.settings_group_summary_layout)),
         navigationRootRow(settingsVm, navigationRowFocus) { saveScroll(); dialogReturn = navigationRowFocus; showNavigation = true },
         RootRow(
@@ -611,10 +617,26 @@ fun SettingsScreen(
             "settings_backdrop", TileTone.SECONDARY, OwnTVIcon.PALETTE,
             title = stringResource(R.string.settings_backdrop_title),
             desc = stringResource(R.string.settings_backdrop_description),
-            chip = stringResource(backdropLabelRes(settingsBackdrop)),
-            chipTone = TileTone.SECONDARY,
+            // The dimming is a slider: ◀ ▶ walk it from opaque black to a clear window, and OK
+            // steps through the stops that matter. It is the row's own control, so it can never
+            // end up in a list the remote cannot reach.
+            value = tv.own.owntv.features.settings.SettingValue.Stepper(stringResource(R.string.common_percent, settingsBackdrop.dim)),
+            onStep = { step ->
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropDim(settingsBackdrop.dim + step * BACKDROP_STEP)
+            },
             focus = backdropRowFocus,
-            onClick = { saveScroll(); dialogReturn = backdropRowFocus; showBackdrop = true },
+            onClick = {
+                val next = backdropStops.firstOrNull { it > settingsBackdrop.dim } ?: backdropStops.first()
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropDim(next)
+            },
+        ),
+        RootRow(
+            "settings_backdrop_glass", TileTone.SECONDARY, OwnTVIcon.SPARKLE,
+            title = stringResource(R.string.settings_backdrop_glass),
+            desc = stringResource(R.string.settings_backdrop_glass_description),
+            chip = stringResource(if (settingsBackdrop.glass) R.string.common_on else R.string.common_off),
+            chipTone = if (settingsBackdrop.glass) TileTone.PRIMARY else TileTone.SECONDARY,
+            onClick = { tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropGlass(!settingsBackdrop.glass) },
         ),
         *stageLayoutRows(settingsVm, stageSettings) { saveScroll(); dialogReturn = it }.toTypedArray(),
         RootRow(
@@ -876,7 +898,14 @@ fun SettingsScreen(
             menuLabelsSearchEntry(settingsVm) { saveScroll(); dialogReturn = searchFieldFocus; showNavigation = true },
             liveLayoutSearchEntry(settingsVm) { saveScroll(); dialogReturn = searchFieldFocus; showLiveLayout = true },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_backdrop_title), stringResource(R.string.settings_backdrop_description), OwnTVIcon.PALETTE, TileTone.SECONDARY,
-                chip = stringResource(backdropLabelRes(settingsBackdrop)), chipTone = TileTone.SECONDARY) { saveScroll(); dialogReturn = searchFieldFocus; showBackdrop = true },
+                chip = stringResource(R.string.common_percent, settingsBackdrop.dim), chipTone = TileTone.SECONDARY) {
+                val next = backdropStops.firstOrNull { it > settingsBackdrop.dim } ?: backdropStops.first()
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropDim(next)
+            },
+            SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_backdrop_glass), stringResource(R.string.settings_backdrop_glass_description), OwnTVIcon.SPARKLE, TileTone.SECONDARY,
+                chip = stringResource(if (settingsBackdrop.glass) R.string.common_on else R.string.common_off), chipTone = if (settingsBackdrop.glass) TileTone.PRIMARY else TileTone.SECONDARY) {
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropGlass(!settingsBackdrop.glass)
+            },
             SettingsSearchEntry(stringResource(R.string.settings_live_tv), stringResource(R.string.settings_hide_empty_categories), stringResource(R.string.settings_hide_empty_categories_description), OwnTVIcon.LIST_GRID, TileTone.SECONDARY,
                 chip = stringResource(if (hideEmptyCategories) R.string.common_on else R.string.common_off), chipTone = if (hideEmptyCategories) TileTone.PRIMARY else TileTone.SECONDARY) {
                 tv.own.owntv.features.live.LiveUiStore.setHideEmptyCategories(!hideEmptyCategories)
@@ -1194,7 +1223,6 @@ fun SettingsScreen(
     }
     if (showVodLayout) VodLayoutDialog(settingsVm, vodLayout, onClose = { showVodLayout = false })
     if (showLiveLayout) LiveLayoutDialog(settingsVm, onClose = { showLiveLayout = false })
-    if (showBackdrop) SettingsBackdropDialog(onClose = { showBackdrop = false })
     StageSettingsDialogHost(settingsVm, stageSettings)
     tv.own.owntv.features.settings.lock.SettingsLockDialogHost(settingsLock, settingsLockVm)
     if (showFocusHighlight) {
@@ -1416,27 +1444,9 @@ private fun liveLayoutLabelRes(layout: tv.own.owntv.core.settings.SettingsReposi
     if (layout == tv.own.owntv.core.settings.SettingsRepository.LiveLayout.SEPARATE) R.string.settings_vod_layout_separate
     else R.string.settings_live_layout_stage
 
-/** The name of the backdrop the Settings window is drawn on. */
-private fun backdropLabelRes(backdrop: tv.own.owntv.features.live.SettingsBackdrop): Int = when (backdrop) {
-    tv.own.owntv.features.live.SettingsBackdrop.DIM -> R.string.settings_backdrop_dim
-    tv.own.owntv.features.live.SettingsBackdrop.GLASS -> R.string.settings_backdrop_glass
-    tv.own.owntv.features.live.SettingsBackdrop.TRANSPARENT -> R.string.settings_backdrop_transparent
-}
-
-/** How much of the picture shows through the Settings window. */
-@Composable
-private fun SettingsBackdropDialog(onClose: () -> Unit) {
-    val store = tv.own.owntv.features.live.LiveUiStore
-    val current by store.settingsBackdrop.collectAsStateWithLifecycle()
-    tv.own.owntv.features.settings.PickerDialog(
-        title = stringResource(R.string.settings_backdrop_title),
-        subtitle = stringResource(R.string.settings_backdrop_description),
-        options = tv.own.owntv.features.live.SettingsBackdrop.entries.map { it.name to stringResource(backdropLabelRes(it)) },
-        selected = current.name,
-        onSelect = { store.setSettingsBackdrop(tv.own.owntv.features.live.SettingsBackdrop.valueOf(it)); onClose() },
-        onDismiss = onClose,
-    )
-}
+/** The dimming the window's slider walks in, and the stops OK cycles through. */
+private const val BACKDROP_STEP = 5
+private val backdropStops = listOf(0, 40, 78, 100)
 
 @Composable
 private fun LiveLayoutDialog(settingsVm: SettingsViewModel, onClose: () -> Unit) {

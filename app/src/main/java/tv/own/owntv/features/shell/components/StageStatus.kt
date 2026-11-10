@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -68,6 +69,8 @@ fun StageStatusCluster(
     playlistInteractive: Boolean,
     onPlaylistClick: () -> Unit,
     pillsFocusable: Boolean,
+    /** The first of the pills, so the content can hand the focus to them (the provider, the last channel). */
+    pillsFocusRequester: FocusRequester? = null,
     weatherInfo: WeatherInfo?,
     weatherFahrenheit: Boolean,
     clockColors: ClockColors,
@@ -91,7 +94,9 @@ fun StageStatusCluster(
                     icon = continuePill.icon,
                     iconFilled = continuePill.iconFilled,
                     onClick = continuePill.onClick,
-                    modifier = Modifier.focusProperties { canFocus = pillsFocusable },
+                    modifier = Modifier
+                        .then(if (pillsFocusRequester != null) Modifier.focusRequester(pillsFocusRequester) else Modifier)
+                        .focusProperties { canFocus = pillsFocusable },
                 )
             }
             StagePill(
@@ -102,6 +107,8 @@ fun StageStatusCluster(
                 enabled = playlistInteractive,
                 modifier = Modifier
                     .onGloballyPositioned { onPlaylistPillBounds(it.boundsInWindow()) }
+                    // With no "last channel" pill there is only this one to aim at.
+                    .then(if (continuePill == null && pillsFocusRequester != null) Modifier.focusRequester(pillsFocusRequester) else Modifier)
                     .focusProperties {
                         canFocus = pillsFocusable
                         if (playlistDownFocusRequester != null) down = playlistDownFocusRequester
