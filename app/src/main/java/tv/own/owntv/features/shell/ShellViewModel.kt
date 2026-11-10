@@ -247,27 +247,38 @@ class ShellViewModel(
         .map<Long, Long?> { it }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val _selectedSection = MutableStateFlow(MainSection.HOME)
+    private val _selectedSection = MutableStateFlow(MainSection.LIVE_TV)
     val selectedSection: StateFlow<MainSection> = _selectedSection.asStateFlow()
+
+    /**
+     * The only destinations this IPTV build exposes. Everything else (Home, Movies, Series,
+     * Sports, Downloads) is compiled out of the experience: the rail never lists it and
+     * [selectSection] refuses it, so no deep link, shortcut or restored setting can surface it.
+     */
+    private val iptvSections = setOf(
+        MainSection.LIVE_TV, MainSection.EPG, MainSection.SEARCH,
+        MainSection.SETTINGS, MainSection.MORE,
+    )
 
     // The section Settings was opened from, for Back out of its PIN prompt.
     private var sectionBeforeSettings = MainSection.MORE
 
     fun selectSection(section: MainSection) {
-        if (section == MainSection.SETTINGS && _selectedSection.value != MainSection.SETTINGS) {
+        val target = if (section in iptvSections) section else MainSection.LIVE_TV
+        if (target == MainSection.SETTINGS && _selectedSection.value != MainSection.SETTINGS) {
             sectionBeforeSettings = _selectedSection.value
         }
-        _selectedSection.value = section
+        _selectedSection.value = target
     }
 
     /** Where to go when Settings stays locked: see [sectionAfterLockedSettings]. */
     fun sectionToLeaveLockedSettings(): MainSection =
         sectionAfterLockedSettings(sectionBeforeSettings, visibleSections.value)
 
-    /** Which browse sections currently show as icons in the rail (v4.3.0 — Nav menu customization).
-     *  The rule itself lives in core's [NavVisibility], shared with the mobile app's bottom bar. */
+    /** Which browse sections show in the rail: Live TV and the Guide, nothing else. */
     val visibleSections: StateFlow<Set<MainSection>> = navVisibility.visibleSections()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainSection.allBrowse)
+        .map { it.intersect(setOf(MainSection.LIVE_TV, MainSection.EPG)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), setOf(MainSection.LIVE_TV, MainSection.EPG))
 
     init {
         // v4.3.0 — if the section the user is viewing becomes hidden (in either mode), jump to the first

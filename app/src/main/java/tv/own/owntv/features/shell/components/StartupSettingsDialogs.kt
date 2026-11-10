@@ -100,7 +100,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.StartupChannelList(
 @Composable
 internal fun startupLabel(mode: tv.own.owntv.core.settings.StartupMode): String = stringResource(
     when (mode) {
-        tv.own.owntv.core.settings.StartupMode.HOME -> R.string.settings_startup_home
+        tv.own.owntv.core.settings.StartupMode.HOME -> R.string.common_nav_live_tv
         tv.own.owntv.core.settings.StartupMode.LAST_CHANNEL -> R.string.settings_startup_last_channel
         tv.own.owntv.core.settings.StartupMode.LAST_CHANNEL_GUIDE -> R.string.settings_startup_last_channel_guide
         tv.own.owntv.core.settings.StartupMode.LAST_CHANNEL_LIVE -> R.string.settings_startup_last_channel_live

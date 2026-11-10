@@ -108,13 +108,15 @@ class SearchViewModel(
     val curatedResults: StateFlow<SearchResults> = combine(_intent, ctx) { i, c -> i to c }
         .flatMapLatest { (i, c) ->
             if (i == null) flowOf(SearchResults())
-            else flowOf(searchReader.curated(c.profileId, c, i))
+            else flowOf(searchReader.curated(c.profileId, c, i).copy(movies = emptyList(), series = emptyList()))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchResults())
 
     private suspend fun search(q: String): SearchResults {
         val pid = currentProfileId() ?: return SearchResults()
-        return searchReader.search(pid, ctx.value, q)
+        // IPTV-only build: search never surfaces films or series, even if a legacy source still
+        // carries them. Channels and guide programmes are all this app plays.
+        return searchReader.search(pid, ctx.value, q).copy(movies = emptyList(), series = emptyList())
     }
 
     // --- Stage page ---

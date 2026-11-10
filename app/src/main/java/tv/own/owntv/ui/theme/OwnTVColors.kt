@@ -132,13 +132,15 @@ fun ownTvColors(
     return if (isDark) {
         OwnTVColors(
             isDark = true,
-            background = DarkBackground,
-            surface = DarkSurface,
-            surfaceContainerLowest = DarkSurfaceContainerLowest,
-            surfaceContainerLow = DarkSurfaceContainerLow,
-            surfaceContainer = DarkSurfaceContainer,
-            surfaceContainerHigh = DarkSurfaceContainerHigh,
-            surfaceContainerHighest = DarkSurfaceContainerHighest,
+            // AMOLED: M3's background tier is true black; containers climb a few greys so
+            // cards and popups still separate from the page.
+            background = Color.Black,
+            surface = Color(0xFF050505),
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = Color(0xFF070707),
+            surfaceContainer = Color(0xFF0A0A0A),
+            surfaceContainerHigh = Color(0xFF101010),
+            surfaceContainerHighest = Color(0xFF161616),
             onSurface = DarkOnSurface,
             onSurfaceVariant = DarkOnSurfaceVariant,
             outline = DarkOutline,

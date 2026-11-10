@@ -179,7 +179,9 @@ fun SearchScreen(
     val singleSessionBlocked by liveVm.previewBlockedSingleSession.collectAsStateWithLifecycle()
 
     val fieldFocus = remember { FocusRequester() }
-    val filterFocus = remember { SearchKind.entries.associateWith { FocusRequester() } }
+    // IPTV-only: films and series are never searched, so their filter buttons are not offered.
+    val filterKinds = remember { SearchKind.entries.filter { it != SearchKind.MOVIES && it != SearchKind.SERIES } }
+    val filterFocus = remember { filterKinds.associateWith { FocusRequester() } }
     val jumpFocus = remember { FocusRequester() }
     val rowFocus = remember { HashMap<String, FocusRequester>() }
     fun requesterFor(key: String) = rowFocus.getOrPut(key) { FocusRequester() }
@@ -191,7 +193,7 @@ fun SearchScreen(
     val singleKind = searching && kinds.size == 1
     val entries = searchEntries(shown, grouped = !singleKind, capChannels = searching && !singleKind)
     // ▼ from the field and ▲ out of the results land on the first button that is on, else the first.
-    val filterEntry = filterFocus.getValue(kinds.minOrNull() ?: SearchKind.entries.first())
+    val filterEntry = filterFocus.getValue(kinds.minOrNull() ?: filterKinds.first())
     var filterFocused by remember { mutableStateOf<SearchKind?>(null) }
 
     // The focused row drives the right side; nothing focused yet = the first result.
@@ -319,7 +321,7 @@ fun SearchScreen(
         if (searching) {
             // Filter buttons: OK switches one on or off, several can be on, none on shows everything.
             Row(Modifier.padding(start = fx(84) - 12.mpx, top = 192.mpx), horizontalArrangement = Arrangement.spacedBy(16.mpx)) {
-                SearchKind.entries.forEach { k ->
+                filterKinds.forEach { k ->
                     StageTab(
                         label = k.label(),
                         count = localizedInteger(results.count(k)),
@@ -680,7 +682,8 @@ private fun Launcher(
     Column(modifier.focusGroup()) {
         GroupHeading(stringResource(R.string.search_jump_to).uppercase(locale), Modifier.padding(top = 8.mpx, bottom = 10.mpx))
         Row(horizontalArrangement = Arrangement.spacedBy(10.mpx)) {
-            SearchIntent.entries.forEach { i ->
+            val intents = listOf(SearchIntent.CHANNELS)
+            intents.forEach { i ->
                 val icon = when (i) {
                     SearchIntent.CONTINUE -> OwnTVIcon.PLAY
                     SearchIntent.UNWATCHED -> OwnTVIcon.SPARKLE
@@ -688,7 +691,7 @@ private fun Launcher(
                 }
                 StageTool(
                     text = i.displayLabel(), icon = icon, onClick = { onIntent(i) },
-                    modifier = if (i == SearchIntent.entries.first()) Modifier.focusRequester(firstFocus) else Modifier,
+                    modifier = if (i == intents.first()) Modifier.focusRequester(firstFocus) else Modifier,
                 )
             }
         }

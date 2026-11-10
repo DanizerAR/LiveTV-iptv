@@ -559,7 +559,7 @@ fun OwnTVShell(
                     liveVm.watchFullscreen(channel, emptyList())
                     playerMode = PlayerMode.FULLSCREEN
                 } else {
-                    onSelectSection(MainSection.HOME)
+                    onSelectSection(MainSection.LIVE_TV)
                     localSubToast.show(startupChannelUnavailable)
                 }
             }
@@ -892,16 +892,11 @@ fun OwnTVShell(
                 onDeepLinkConsumed()
             }
             else -> when (val launch = launcherIntegrationRepository.resolveLaunch(pid, deepLink)) {
+                // IPTV-only: film/series launcher tiles are ignored rather than opening VOD.
                 is LauncherLaunch.Movie -> {
-                    onSelectSection(MainSection.MOVIES)
-                    movieVm.play(launch.movie, launch.startPositionMs)
-                    openFullscreen(MainSection.MOVIES)
                     onDeepLinkConsumed()
                 }
                 is LauncherLaunch.Episode -> {
-                    onSelectSection(MainSection.SERIES)
-                    seriesVm.playEpisodeQueue(launch.show, launch.queue, launch.episode, launch.startPositionMs)
-                    openFullscreen(MainSection.SERIES)
                     onDeepLinkConsumed()
                 }
                 is LauncherLaunch.Live -> {
@@ -913,8 +908,6 @@ fun OwnTVShell(
                     onDeepLinkConsumed()
                 }
                 is LauncherLaunch.Series -> {
-                    onSelectSection(MainSection.SERIES)
-                    seriesVm.openSeries(launch.show)
                     onDeepLinkConsumed()
                 }
                 null -> {
@@ -1512,8 +1505,8 @@ fun OwnTVShell(
         // remains visible, exactly like the approved concept. It never intercepts input; fullscreen
         // video and glass mode skip it entirely. Global Animations Off also freezes the slow pulse.
         SolidAmbientBackdrop(
-            glowEnabled = ambientGlowEnabled,
-            pulseEnabled = ambientGlowPulse && shellAnimationLevel != tv.own.owntv.core.theme.AnimationLevel.OFF,
+            glowEnabled = false, // AMOLED: true-black page, no ambient wash
+            pulseEnabled = false,
             modifier = Modifier.fillMaxSize(),
         )
       }

@@ -40,15 +40,8 @@ fun AddSourceChooserScreen(
         rowsFocus = rowsFocus,
         settingsRoot = false,
     ) {
-        val phone = stringResource(R.string.setup_from_phone)
-        StageSettingRow(
-            icon = OwnTVIcon.PHONE,
-            title = phone,
-            desc = stringResource(R.string.settings_line_add_from_phone),
-            value = SettingValue.Opens(null),
-            onClick = onRemote,
-            help = SettingHelp(phone, stringResource(R.string.settings_help_add_from_phone), hints = hints),
-        )
+        // "From your phone" is not offered in this M3U-only build: it can create Xtream/Stalker
+        // sources, which this app does not play.
         val here = stringResource(R.string.settings_add_type_here)
         StageSettingRow(
             icon = OwnTVIcon.PENCIL,

@@ -99,11 +99,9 @@ fun OwnTVTheme(
     popupSizePercent: Int = PopupSizeScale.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    val useDark = when (themeMode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> systemInDarkTheme
-    }
+    // This build is AMOLED-dark only: the theme choice is kept in storage for compatibility,
+    // but the interface always renders the black palette.
+    val useDark = true
 
     val colors = ownTvColors(
         isDark = useDark,

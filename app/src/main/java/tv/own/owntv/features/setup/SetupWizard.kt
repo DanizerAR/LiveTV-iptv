@@ -548,7 +548,8 @@ private fun AddContentStep(hasExisting: Boolean, onPhone: () -> Unit, onType: ()
     ) {
         WizardCards(
             listOfNotNull(
-                WizardCard(OwnTVIcon.PHONE, stringResource(R.string.setup_from_phone), stringResource(R.string.setup_phone_card_line), onPhone),
+                // "From your phone" is omitted: it can create Xtream/Stalker sources, and this
+                // build accepts M3U playlists only.
                 WizardCard(OwnTVIcon.PENCIL, stringResource(R.string.settings_add_type_here), stringResource(R.string.settings_line_add_type_here), onType),
                 if (hasExisting) WizardCard(OwnTVIcon.PLAYLIST, stringResource(R.string.setup_existing), stringResource(R.string.setup_use_other_profile_playlists), onExisting) else null,
                 WizardCard(OwnTVIcon.DOWNLOADS, stringResource(R.string.setup_import), stringResource(R.string.setup_restore_backup_file), onImport),

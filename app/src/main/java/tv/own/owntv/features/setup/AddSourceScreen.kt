@@ -129,7 +129,8 @@ fun AddSourceScreen(
             when (initial?.type) {
                 SourceType.M3U -> SourceKind.M3U
                 SourceType.STALKER -> SourceKind.STALKER
-                else -> SourceKind.XTREAM
+                SourceType.XTREAM -> SourceKind.XTREAM
+                else -> SourceKind.M3U
             },
         )
     }
@@ -498,8 +499,9 @@ fun AddSourceScreen(
         rowsFocus = firstFocus,
         settingsRoot = false,
     ) {
-        // Type: locked while editing (a source can't change its type).
-        val kinds = listOfNotNull(SourceKind.XTREAM, SourceKind.M3U, SourceKind.STALKER.takeIf { onStartStalker != null })
+        // This build is M3U-only. Legacy Xtream/Stalker sources can still be opened for editing,
+        // but nothing can be added as anything other than an M3U playlist (URL or local file).
+        val kinds = if (editing && kind != SourceKind.M3U) listOf(kind) else listOf(SourceKind.M3U)
         val kindLabels = kinds.map {
             stringResource(
                 when (it) {
@@ -510,7 +512,7 @@ fun AddSourceScreen(
             )
         }
         val typeTitle = stringResource(R.string.settings_source_type)
-        StageSettingRow(
+        if (kinds.size > 1) StageSettingRow(
             icon = OwnTVIcon.LIST,
             title = typeTitle,
             desc = stringResource(R.string.settings_line_source_type),

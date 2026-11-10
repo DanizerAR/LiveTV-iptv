@@ -34,6 +34,8 @@ android {
     compileSdk {
         version = release(37)
     }
+    // Pinned to the aarch64 build-tools installed on this machine (see local.properties).
+    buildToolsVersion = "37.0.0"
 
     // Signing credentials AND local-only build switches, kept in a standalone properties file OUTSIDE
     // the repo. Gradle only reads gradle.properties from GRADLE_USER_HOME or the project dir, so this

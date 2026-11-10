@@ -304,16 +304,12 @@ internal fun FavouritesPage(
     }
 
     val showLive = filter == FavFilter.ALL || filter == FavFilter.LIVE
-    val vodShown = when (filter) {
-        FavFilter.ALL -> lists.movies.map { MediaType.MOVIE to it } + lists.series.map { MediaType.SERIES to it }
-        FavFilter.MOVIES -> lists.movies.map { MediaType.MOVIE to it }
-        FavFilter.SERIES -> lists.series.map { MediaType.SERIES to it }
-        FavFilter.LIVE -> emptyList()
-    }
+    // IPTV-only: favourites are channels. Film/series favourites from a legacy source stay in the
+    // database but are never shown or counted here.
+    val vodShown: List<Pair<MediaType, Any>> = emptyList()
     // OK / ▶ from the sheet lands on the first card, as drawn; on the filter when there is none.
     val firstTarget = when {
         showLive && lists.live.isNotEmpty() -> focusOf(MediaType.LIVE, lists.live.first().id)
-        vodShown.isNotEmpty() -> vodShown.first().let { (t, item) -> focusOf(t, (item as? tv.own.owntv.core.database.entity.MovieEntity)?.id ?: (item as tv.own.owntv.core.database.entity.SeriesEntity).id) }
         else -> segFocus
     }
 
@@ -321,16 +317,15 @@ internal fun FavouritesPage(
         PageHead(stringResource(R.string.content_category_favorites)) {
             StageSegmented(
                 options = listOf(
-                    counted(R.string.content_epg_all, counts.total), counted(R.string.common_nav_live_tv, counts.live),
-                    counted(R.string.common_nav_movies, counts.movies), counted(R.string.common_nav_series, counts.series),
+                    counted(R.string.content_epg_all, counts.live), counted(R.string.common_nav_live_tv, counts.live),
                 ),
-                selected = filter.ordinal,
-                onSelect = { filter = FavFilter.entries[it] },
+                selected = if (filter == FavFilter.LIVE) 1 else 0,
+                onSelect = { filter = if (it == 1) FavFilter.LIVE else FavFilter.ALL },
                 modifier = Modifier.focusRequester(segFocus),
             )
         }
         androidx.compose.runtime.SideEffect { setEntry { runCatching { firstTarget.requestFocus() }.getOrDefault(false) } }
-        if (counts.total == 0) {
+        if (counts.live == 0) {
             EmptyNote(stringResource(R.string.more_fav_empty_title), stringResource(R.string.more_fav_empty_body))
             return@Column
         }
@@ -435,15 +430,11 @@ internal fun HistoryPage(
 ) {
     val counts by vm.history.collectAsStateWithLifecycle()
     val lists by vm.historyLists.collectAsStateWithLifecycle()
-    // Opens on the type watched most recently.
-    val latest = listOfNotNull(
-        lists.live.firstOrNull()?.let { MediaType.LIVE to it.watchedAt },
-        lists.movies.firstOrNull()?.let { MediaType.MOVIE to it.watchedAt },
-        lists.series.firstOrNull()?.let { MediaType.SERIES to it.watchedAt },
-    ).maxByOrNull { it.second }?.first ?: MediaType.MOVIE
+    // Opens on live: films and series from a legacy source never appear in this IPTV build.
+    val latest = MediaType.LIVE
     var tab by rememberSaveable { mutableStateOf<MediaType?>(null) }
     val type = tab ?: latest
-    val rows = when (type) { MediaType.LIVE -> lists.live; MediaType.MOVIE -> lists.movies; else -> lists.series }
+    val rows = lists.live
     var showClear by remember { mutableStateOf(false) }
     val clearFocus = remember { FocusRequester() }
     val segFocus = remember { FocusRequester() }
@@ -463,10 +454,10 @@ internal fun HistoryPage(
 
     Column(Modifier.fillMaxSize().focusGroup()) {
         PageHead(stringResource(R.string.content_category_history)) {
-            val order = listOf(MediaType.LIVE, MediaType.MOVIE, MediaType.SERIES)
+            val order = listOf(MediaType.LIVE)
             StageSegmented(
-                options = listOf(counted(R.string.common_nav_live_tv, counts.live), counted(R.string.common_nav_movies, counts.movies), counted(R.string.common_nav_series, counts.series)),
-                selected = order.indexOf(type),
+                options = listOf(counted(R.string.common_nav_live_tv, counts.live)),
+                selected = 0,
                 onSelect = { tab = order[it] },
                 modifier = Modifier.focusRequester(segFocus),
             )
