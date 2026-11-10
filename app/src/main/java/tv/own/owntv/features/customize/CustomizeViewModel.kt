@@ -32,7 +32,7 @@ import tv.own.owntv.core.database.dao.CustomCategoryDao
 import tv.own.owntv.core.database.dao.SourceDao
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.repository.ActiveProfileSources
-import tv.own.owntv.core.repository.activeProfileSources
+import tv.own.owntv.features.live.activeLiveProfileSources
 import tv.own.owntv.core.settings.SettingsRepository
 
 /** One category row in the Customize screen (hidden rows stay visible here, marked, for unhiding).
@@ -88,7 +88,7 @@ class CustomizeViewModel(
     // chosen "active playlist" filter also applies HERE: with playlist A selected you only see A's
     // categories, not B's. "All playlists" (default -1) still shows the merged set. Per-section Off
     // flags also hide that source's categories for the selected section.
-    private val ctx: StateFlow<Ctx> = activeProfileSources(settings, sourceDao)
+    private val ctx: StateFlow<Ctx> = activeLiveProfileSources(settings, sourceDao)
         .map { aps -> Ctx(aps.profileId, aps.sources) }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Ctx(-1L, emptyList()))
@@ -297,11 +297,15 @@ class CustomizeViewModel(
         }
     }
 
-    /** The single playlist picked at the top right, or null for "All playlists" — what
-     *  [restoreSectionDefaults] covers, so the confirmation can name it. */
-    val restorePlaylistName: StateFlow<String?> = combine(ctx, settings.defaultSourceId) { c, id ->
-        c.sources.firstOrNull { it.id == id && id > 0 }?.name
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    /** The single playlist shown at the top right, or null when several/All are merged. */
+    val restorePlaylistName: StateFlow<String?> = ctx
+        .map { it.sources.singleOrNull()?.name }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** How many playlists the reset covers, so the confirmation can say "3 playlists" rather than "All". */
+    val restorePlaylistCount: StateFlow<Int> = ctx
+        .map { it.sources.size }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     /**
      * Puts the playlists this section is showing (the top-right choice) back to what they provide: their hidden categories

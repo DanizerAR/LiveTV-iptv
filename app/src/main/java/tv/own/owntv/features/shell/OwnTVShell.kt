@@ -82,6 +82,7 @@ import tv.own.owntv.features.shell.components.ExitDialog
 import tv.own.owntv.features.shell.components.IncompleteRestoreDialog
 import tv.own.owntv.features.shell.components.SettingsScreen
 import tv.own.owntv.features.shell.components.SolidAmbientBackdrop
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import tv.own.owntv.player.alignment
 import tv.own.owntv.ui.theme.mpx
@@ -124,8 +125,8 @@ fun OwnTVShell(
     profileName: String,
     sourceSummary: String?,
     playlists: List<tv.own.owntv.core.database.entity.SourceEntity> = emptyList(),
-    activePlaylistId: Long = -1L,
-    onSelectPlaylist: (Long) -> Unit = {},
+    selectedPlaylistIds: Set<Long> = emptySet(),
+    onSelectPlaylists: (Set<Long>) -> Unit = {},
     weatherInfo: tv.own.owntv.core.weather.WeatherInfo? = null,
     weatherFahrenheit: Boolean = false,
     activeProfileId: Long?,
@@ -146,15 +147,24 @@ fun OwnTVShell(
     // When focus was last sent to the rail on purpose: ◀ / ▶ from the content, or the app itself
     // ([focusRail]). A rail visit that follows neither does not open the floating rail (#7.1).
     var railKeyAt by remember { mutableLongStateOf(0L) }
+    val railVisible by tv.own.owntv.features.live.LiveUiStore.railVisible.collectAsStateWithLifecycle()
+    // Where ▶ out of the Stage rail returns to: the content, exactly as it was left. Also where focus
+    // goes when the rail is hidden, so a shortcut or a closed player never leaves the screen focusless.
+    val contentAreaFocus = remember { FocusRequester() }
+    var focusedLayer by remember { mutableStateOf(ShellLayer.SIDEBAR) }
     val focusRail = {
-        railKeyAt = android.os.SystemClock.uptimeMillis()
-        runCatching { sidebarFocus.requestFocus() }
+        if (railVisible) {
+            railKeyAt = android.os.SystemClock.uptimeMillis()
+            runCatching { sidebarFocus.requestFocus() }
+        } else {
+            focusedLayer = ShellLayer.CONTENT
+            runCatching { contentAreaFocus.requestFocus() }
+        }
         Unit
     }
     val contentFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val contentLtr = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Ltr
     val homeFirstRowFocus = remember { FocusRequester() }
-    var focusedLayer by remember { mutableStateOf(ShellLayer.SIDEBAR) }
     var showExit by remember { mutableStateOf(false) }
     var showAvatarPicker by remember { mutableStateOf(false) }
     var showAvatarChooser by remember { mutableStateOf(false) }
@@ -214,7 +224,6 @@ fun OwnTVShell(
     val railCounts by railVm.counts.collectAsStateWithLifecycle()
     val railDetails by railVm.details.collectAsStateWithLifecycle()
     // Where ▶ out of the Stage rail returns to: the content, exactly as it was left.
-    val contentAreaFocus = remember { FocusRequester() }
     var homeEntry by remember { mutableStateOf<(() -> Boolean)?>(null) }
     // The guide's entry hook: the TV Guide, or Live TV in Guide view (null while Live TV shows its list).
     var guideEntry by remember { mutableStateOf<(() -> Boolean)?>(null) }
@@ -741,6 +750,14 @@ fun OwnTVShell(
         )
         else -> null
     }
+    // The first run of this build opens Live TV as the three-panel layout (categories, channels,
+    // preview). It is a one-time seed: turning it back to Stage in Settings is remembered.
+    LaunchedEffect(Unit) {
+        if (!tv.own.owntv.features.live.LiveUiStore.threePanelSeeded.value) {
+            settingsRepo.setLiveLayout(tv.own.owntv.core.settings.SettingsRepository.LiveLayout.SEPARATE)
+            tv.own.owntv.features.live.LiveUiStore.markThreePanelSeeded()
+        }
+    }
     // Auto-hide: once focus has been in the content for the chosen delay, the capsule slides away.
     var railIdleHidden by remember { mutableStateOf(false) }
     // Focus on a top-right pill (reached from the rail) is not "in the rail": the rail closes, so its
@@ -777,12 +794,15 @@ fun OwnTVShell(
         railIdleHidden -> tv.own.owntv.features.shell.components.RailState.HIDDEN
         else -> tv.own.owntv.features.shell.components.RailState.CAPSULE
     }
-    // The playlist chip reflects the active filter: "All playlists" when none is chosen (id <= 0), the
-    // chosen playlist's name otherwise. With a single playlist there's nothing to switch, so just its name.
+    // The playlist chip reflects the active filter: "All playlists" when none is chosen, otherwise
+    // the chosen names (or "3 playlists" when that would not fit). With a single playlist there is
+    // nothing to switch, so just its name.
+    val selectedPlaylists = playlists.filter { it.id in selectedPlaylistIds }
     val playlistLabel = when {
         playlists.size <= 1 -> sourceSummary ?: noSourceLabel
-        activePlaylistId <= 0L -> stringResource(R.string.content_all_playlists)
-        else -> playlists.firstOrNull { it.id == activePlaylistId }?.name ?: (sourceSummary ?: noSourceLabel)
+        selectedPlaylistIds.isEmpty() || selectedPlaylists.isEmpty() -> stringResource(R.string.content_all_playlists)
+        selectedPlaylists.size <= 2 -> selectedPlaylists.joinToString(stringResource(R.string.content_epg_bits_separator)) { it.name }
+        else -> pluralStringResource(R.plurals.more_playlist_count, selectedPlaylists.size, selectedPlaylists.size)
     }
     // OK on the rail item moves focus INTO the window (it is not a section and navigates nowhere).
     val enterNowPlaying = {
@@ -879,7 +899,15 @@ fun OwnTVShell(
     LaunchedEffect(sidebarFocus) {
         tv.own.owntv.core.util.Perf.stamp("shell-composed")
         withFrameNanos { }
-        focusRail()
+        if (railVisible) {
+            focusRail()
+        } else {
+            // The rail is off: hand focus to the content so the remote works on the first press.
+            repeat(10) {
+                withFrameNanos { }
+                if (runCatching { contentAreaFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+            }
+        }
     }
 
     LaunchedEffect(pendingDeepLink, activeProfileId) {
@@ -926,7 +954,7 @@ fun OwnTVShell(
         if (selectedSection != MainSection.HOME || playerMode != PlayerMode.NONE) homeVm.stopPreview()
     }
 
-    LaunchedEffect(selectedSection, playerMode, activeProfileId, activePlaylistId) {
+    LaunchedEffect(selectedSection, playerMode, activeProfileId, selectedPlaylistIds) {
         if (selectedSection == MainSection.HOME && playerMode == PlayerMode.NONE && (activeProfileId?.let { it >= 0 } == true)) {
             homeVm.refresh(activeProfileId)
         }
@@ -963,7 +991,8 @@ fun OwnTVShell(
             // Reached from a Search result: Back returns to Search once, its query, tab and row kept.
             searchReturn == selectedSection && focusedLayer != ShellLayer.SIDEBAR -> returnToSearch()
             focusedLayer == ShellLayer.SIDEBAR -> showExit = true
-            else -> focusRail()
+            railVisible -> focusRail()
+            else -> showExit = true
         }
     }
 
@@ -1185,7 +1214,7 @@ fun OwnTVShell(
                             // edge (or beside a docked rail).
                             Modifier
                                 .padding(
-                                    start = if (navStyle == tv.own.owntv.core.settings.SettingsRepository.NavStyle.DOCKED) {
+                                    start = if (railVisible && navStyle == tv.own.owntv.core.settings.SettingsRepository.NavStyle.DOCKED) {
                                         tv.own.owntv.features.shell.components.railDockedReserve(navSize)
                                     } else 0.dp,
                                 )
@@ -1377,6 +1406,16 @@ fun OwnTVShell(
                             previewEnabled = playerMode == PlayerMode.NONE,
                             restoreFocus = restoreFocus,
                             onRestored = { restoreFocus = false },
+                            navDock = if (!railVisible) {
+                                {
+                                    tv.own.owntv.features.shell.components.ShellNavDock(
+                                        selected = selectedSection,
+                                        visibleSections = visibleSections,
+                                        onSelect = selectFromNav,
+                                        onShowRail = { tv.own.owntv.features.live.LiveUiStore.setRailVisible(true) },
+                                    )
+                                }
+                            } else null,
                             modifier = Modifier.fillMaxSize(),
                         )
 
@@ -1469,6 +1508,7 @@ fun OwnTVShell(
                 onPlaylistPillBounds = { playlistPillBounds = it },
                 modifier = Modifier.align(Alignment.TopEnd).onFocusChanged { clusterFocused = it.hasFocus }.focusGroup(),
             )
+            if (railVisible) {
             tv.own.owntv.features.shell.components.StageRail(
                 state = railState,
                 size = railSize,
@@ -1499,6 +1539,16 @@ fun OwnTVShell(
                 nowPlaying = nowPlayingRail,
                 onNowPlaying = enterNowPlaying,
             )
+          }
+            if (!railVisible && selectedSection != MainSection.LIVE_TV && playerMode != PlayerMode.FULLSCREEN) {
+                tv.own.owntv.features.shell.components.ShellNavDock(
+                    selected = selectedSection,
+                    visibleSections = visibleSections,
+                    onSelect = selectFromNav,
+                    onShowRail = { tv.own.owntv.features.live.LiveUiStore.setRailVisible(true) },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 104.mpx, end = 64.mpx),
+                )
+            }
           }
         }
         // The solid-mode wizard aura is deliberately drawn after the opaque browse surfaces so it
@@ -2034,11 +2084,15 @@ fun OwnTVShell(
         tv.own.owntv.ui.components.OwnTVPopup(onDismissRequest = { showPlaylistPicker = false }, stageLayout = true) {
             tv.own.owntv.features.shell.components.StagePlaylistMenu(
                 playlists = playlists,
-                activeId = activePlaylistId,
+                selectedIds = selectedPlaylistIds,
                 pillLabel = playlistLabel,
                 pillBounds = playlistPillBounds,
-                onSelect = onSelectPlaylist,
-                onResync = { shellVm.resync(playlists.filter { it.id == activePlaylistId }.ifEmpty { playlists }) },
+                onApply = onSelectPlaylists,
+                onResync = { ids ->
+                    shellVm.resync(
+                        playlists.filter { it.id in ids }.ifEmpty { playlists },
+                    )
+                },
                 onDismiss = { showPlaylistPicker = false },
             )
         }

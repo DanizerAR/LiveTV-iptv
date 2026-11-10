@@ -63,10 +63,7 @@ import tv.own.owntv.R
 import tv.own.owntv.core.nav.MainSection
 import tv.own.owntv.core.settings.SettingsRepository.NavLength
 import tv.own.owntv.core.settings.SettingsRepository.NavSize
-import tv.own.owntv.ui.components.BrandMark
 import tv.own.owntv.ui.components.OwnTVIcon
-import tv.own.owntv.ui.components.Wordmark
-import tv.own.owntv.ui.components.rememberAppliedIcon
 import tv.own.owntv.ui.stage.StageFocus
 import tv.own.owntv.ui.stage.StageSurface
 import tv.own.owntv.ui.stage.drawBoxShadow
@@ -280,7 +277,6 @@ fun StageRail(
             horizontalAlignment = if (shown) Alignment.Start else Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.mpx),
         ) {
-            RailBrand(shown, namesAlpha)
             if (nowPlaying != null) {
                 RailItem(
                     icon = if (nowPlaying.audioMode) OwnTVIcon.EQ else OwnTVIcon.PLAY,
@@ -317,7 +313,7 @@ fun StageRail(
     }
 }
 
-private val MainSection.stageIcon: OwnTVIcon
+internal val MainSection.stageIcon: OwnTVIcon
     get() = when (this) {
         MainSection.SEARCH -> OwnTVIcon.SEARCH
         MainSection.HOME -> OwnTVIcon.HOME
@@ -347,25 +343,6 @@ private fun RailEdgeGlow(modifier: Modifier) {
                 drawRect(accent, size = size.copy(width = size.width / 2f))
             },
     )
-}
-
-/** The mark (50), with the wordmark beside it when the rail is open (`.brandrow`, 0 10 18 padding). */
-@Composable
-private fun ColumnScope.RailBrand(open: Boolean, namesAlpha: () -> Float) {
-    val icon = rememberAppliedIcon()
-    if (!open) {
-        BrandMark(icon, 50.mpx, Modifier.padding(bottom = 12.mpx))
-        return
-    }
-    Row(
-        Modifier.padding(start = 10.mpx, end = 10.mpx, bottom = 12.mpx),
-        horizontalArrangement = Arrangement.spacedBy(14.mpx),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BrandMark(icon, 50.mpx)
-        // The wordmark, 130 wide (`.brandrow`, `wordmarkC()`).
-        Box(Modifier.graphicsLayer { alpha = namesAlpha() }) { Wordmark(130.mpx) }
-    }
 }
 
 @Composable

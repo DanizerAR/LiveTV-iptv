@@ -3,4 +3,9 @@
     <string name="content_search_channels">Search channels\u2026</string>
     <string name="content_search_movies">Search movies…</string>
     <string name="content_search_series">Search series…</string>
+    <string name="settings_nav_rail">Left navigation panel</string>
+    <string name="settings_nav_rail_description">Show the menu on the left. Turn it off to use the section buttons in the categories panel.</string>
+    <string name="settings_nav_rail_show">Show the navigation panel</string>
+    <string name="shell_playlist_picker_multi_subtitle">Pick one or more playlists; Done applies them everywhere</string>
+    <string name="shell_playlist_names_separator">", "</string>
 </resources>

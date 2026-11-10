@@ -89,6 +89,7 @@ fun CustomizeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var showMoreMenu by remember { mutableStateOf(false) }
     var restoringDefaults by remember { mutableStateOf(false) }
     val restorePlaylist by vm.restorePlaylistName.collectAsStateWithLifecycle()
+    val restorePlaylistCount by vm.restorePlaylistCount.collectAsStateWithLifecycle()
     val moreFocus = remember { FocusRequester() }
     val actionsFocus = remember { FocusRequester() }
     // The category whose Hide button was clicked to close a range — opens the Show/Hide/Cancel prompt.
@@ -432,7 +433,11 @@ fun CustomizeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         else -> R.string.settings_series
                     },
                 ),
-                restorePlaylist ?: stringResource(R.string.content_all_playlists),
+                restorePlaylist ?: if (restorePlaylistCount > 1) {
+                    pluralStringResource(R.plurals.more_playlist_count, restorePlaylistCount, restorePlaylistCount)
+                } else {
+                    stringResource(R.string.content_all_playlists)
+                },
             ),
             message = stringResource(R.string.settings_customize_restore_defaults_description),
             confirmLabel = stringResource(R.string.common_reset),

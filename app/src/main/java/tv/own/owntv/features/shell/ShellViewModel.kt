@@ -76,6 +76,18 @@ class ShellViewModel(
     init {
         // One-time: move any existing playlist EPG into the new standalone EPG sources (v2.2.0).
         viewModelScope.launch { runCatching { epgMigration.run() } }
+        // Core's single "default source" is kept out of the way: whenever something still sets it
+        // (a legacy value, or Add source with "Default" ticked), carry that one playlist into the
+        // multi-playlist store and clear the core filter again, so the store is the only thing
+        // narrowing the Live screen.
+        viewModelScope.launch {
+            settings.defaultSourceId.collect { id ->
+                if (id > 0L) {
+                    tv.own.owntv.features.live.LiveUiStore.setPlaylistIds(setOf(id))
+                    settings.setDefaultSource(-1L)
+                }
+            }
+        }
         // The one-shot settings migrations run from core at process start (PlaybackStartup).
         viewModelScope.launch {
             settings.activeProfileId
@@ -216,13 +228,17 @@ class ShellViewModel(
         .flatMapLatest { pid -> if (pid < 0) flowOf(emptyList()) else sourceRepository.observeSources(pid) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** The chosen active-playlist filter: -1 = All playlists (merged view), else a single playlist id. */
-    val activePlaylistId: StateFlow<Long> = settings.defaultSourceId
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), -1L)
+    /** The playlists the Live screen merges. Empty = All playlists (the default merged view). */
+    val selectedPlaylistIds: StateFlow<Set<Long>> = tv.own.owntv.features.live.LiveUiStore.playlistIds
 
-    /** Switch the active-playlist filter from the top-bar picker. Persists (survives restart). */
-    fun setActivePlaylist(id: Long) {
-        viewModelScope.launch { settings.setDefaultSource(id) }
+    /**
+     * Switch the active-playlist filter from the top-bar picker. Empty means All playlists.
+     * Core's single default source is cleared: this build owns the filter, and leaving it set would
+     * hide the other selected playlists before the store could narrow them.
+     */
+    fun setPlaylistFilter(ids: Set<Long>) {
+        tv.own.owntv.features.live.LiveUiStore.setPlaylistIds(ids)
+        viewModelScope.launch { settings.setDefaultSource(-1L) }
     }
 
     /**
@@ -279,6 +295,23 @@ class ShellViewModel(
     val visibleSections: StateFlow<Set<MainSection>> = navVisibility.visibleSections()
         .map { it.intersect(setOf(MainSection.LIVE_TV, MainSection.EPG)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), setOf(MainSection.LIVE_TV, MainSection.EPG))
+
+    init {
+        // Drop playlist ids that no longer exist (deleted on another screen, or left behind by a
+        // backup restore) so a stale selection never narrows Live TV to an empty list. Wait for the
+        // source list to arrive: a while-subscribed flow starts as empty, and clearing on that
+        // first empty emission would throw the user's selection away on every launch.
+        combine(playlists, tv.own.owntv.features.live.LiveUiStore.playlistIds) { list, ids ->
+            list.map { it.id }.toSet() to ids
+        }
+            .onEach { (available, ids) ->
+                if (available.isNotEmpty() && ids.isNotEmpty()) {
+                    val kept = ids.filter { it in available }.toSet()
+                    if (kept != ids) tv.own.owntv.features.live.LiveUiStore.setPlaylistIds(kept)
+                }
+            }
+            .launchIn(viewModelScope)
+    }
 
     init {
         // v4.3.0 — if the section the user is viewing becomes hidden (in either mode), jump to the first

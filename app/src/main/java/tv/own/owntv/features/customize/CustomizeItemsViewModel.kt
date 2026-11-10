@@ -43,7 +43,7 @@ import tv.own.owntv.core.customize.CustomizationStore
 import tv.own.owntv.core.customize.CustomizeKeys
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.repository.ActiveProfileSources
-import tv.own.owntv.core.repository.activeProfileSources
+import tv.own.owntv.features.live.activeLiveProfileSources
 import tv.own.owntv.core.settings.SettingsRepository
 
 /** One item row in the Customize items screen. */
@@ -76,7 +76,7 @@ class CustomizeItemsViewModel(
         fun sourceIdsFor(type: MediaType): List<Long> = ActiveProfileSources(profileId, sources).sourceIdsFor(type)
     }
 
-    private val ctx: StateFlow<Ctx> = activeProfileSources(settings, sourceDao)
+    private val ctx: StateFlow<Ctx> = activeLiveProfileSources(settings, sourceDao)
         .map { aps -> Ctx(aps.profileId, aps.sources) }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Ctx(-1L, emptyList()))

@@ -107,6 +107,8 @@ fun LiveScreen(
     lockedKey: LiveKey? = null,
     /** Guide view (Live TV tool row): opens the TV Guide until an in-place guide exists. */
     onOpenGuide: () -> Unit = {},
+    /** Section switcher shown in the categories header when the left rail is turned off. */
+    navDock: (@Composable () -> Unit)? = null,
 ) {
     val vm: LiveViewModel = koinViewModel()
     val lockVm: tv.own.owntv.features.categorylock.CategoryLockViewModel = koinViewModel()
@@ -640,6 +642,7 @@ fun LiveScreen(
                 onRowFocus = { catFocusIndex = it },
                 searchQuery = categoryQuery,
                 onSearchQueryChange = vm::setCategoryQuery,
+                headerActions = navDock,
                 modifier = categoriesModifier
                     .padding(start = margin, top = 128.mpx, bottom = 24.mpx)
                     .width(colW)
@@ -753,6 +756,17 @@ fun LiveScreen(
                         icon = OwnTVIcon.SORT,
                         value = if (sortMode == tv.own.owntv.core.settings.SettingsRepository.SortMode.ALPHA) stringResource(R.string.settings_sort_alpha) else stringResource(R.string.content_epg_sort_provider),
                         onClick = vm::toggleSort,
+                    )
+                    tv.own.owntv.ui.stage.StageTool(
+                        text = null,
+                        icon = OwnTVIcon.PANEL_WIDTH,
+                        boxed = separate,
+                        onClick = {
+                            settingsVm.setLiveLayout(
+                                if (separate) tv.own.owntv.core.settings.SettingsRepository.LiveLayout.STAGE
+                                else tv.own.owntv.core.settings.SettingsRepository.LiveLayout.SEPARATE,
+                            )
+                        },
                     )
                     tv.own.owntv.ui.stage.StageTool(
                         text = stringResource(R.string.content_live_guide_view),
@@ -918,6 +932,7 @@ fun LiveScreen(
                 onRowFocus = { catFocusIndex = it },
                 searchQuery = categoryQuery,
                 onSearchQueryChange = vm::setCategoryQuery,
+                headerActions = navDock,
                 modifier = categoriesModifier
                     .padding(start = fx(24), top = 24.mpx, bottom = 24.mpx)
                     .width(sheetW)

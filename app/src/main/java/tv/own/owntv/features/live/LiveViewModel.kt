@@ -311,7 +311,7 @@ class LiveViewModel(
     // create_link resolution) from M3U/Xtream (final URL already stored) without a DB round-trip.
     private var sourceById: Map<Long, tv.own.owntv.core.database.entity.SourceEntity> = emptyMap()
 
-    private val ctx: StateFlow<Ctx> = activeProfileSources(settings, sourceDao)
+    private val ctx: StateFlow<Ctx> = activeLiveProfileSources(settings, sourceDao)
         .map { aps ->
             sourceById = aps.sources.associateBy { it.id }
             val liveIds = aps.liveSourceIds

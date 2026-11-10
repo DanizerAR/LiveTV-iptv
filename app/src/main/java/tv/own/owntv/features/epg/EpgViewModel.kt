@@ -51,7 +51,8 @@ import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.network.ConnectivityObserver
 import tv.own.owntv.core.repository.EpgRepository
 import tv.own.owntv.core.repository.SourceRepository
-import tv.own.owntv.core.repository.activeSourceIds
+import tv.own.owntv.features.live.LiveUiStore
+import tv.own.owntv.features.live.activeLiveSourceIds
 import tv.own.owntv.core.settings.SettingsRepository
 import tv.own.owntv.core.settings.GuideWidthShares
 
@@ -430,7 +431,7 @@ class EpgViewModel(
         // Reload the guide when the active-playlist filter (Settings "Default" / Browse picker) changes,
         // so the grid narrows to the chosen playlist's channels (or back to all). drop(1): initial load
         // is triggered by the screen.
-        settings.defaultSourceId
+        combine(settings.defaultSourceId, LiveUiStore.playlistIds) { _, _ -> Unit }
             .drop(1)
             .distinctUntilChanged()
             .onEach { load() }
@@ -788,7 +789,7 @@ class EpgViewModel(
                 val pid = settings.activeProfileId.first()
                 // The playlist(s) the guide is showing (the top-right choice), not every playlist on the
                 // profile: with a 400-channel playlist picked it scored a 55k lineup too.
-                val playlistIds = if (pid < 0) emptyList() else activeSourceIds(settings, sourceDao, pid, MediaType.LIVE)
+                val playlistIds = if (pid < 0) emptyList() else activeLiveSourceIds(settings, sourceDao, pid)
                 if (playlistIds.isEmpty()) { _matchSummary.value = EpgMatchSummary.AddPlaylist; return@launch }
                 val cust = customize.observe(pid, MediaType.LIVE).first()
 
@@ -926,7 +927,7 @@ class EpgViewModel(
             )
             return
         }
-        val playlistIds = activeSourceIds(settings, sourceDao, pid, MediaType.LIVE)
+        val playlistIds = activeLiveSourceIds(settings, sourceDao, pid)
         val epgIds = epgSourceStore.getAll().map { it.id }
         // Channels come from the playlists; guide data is matched from BOTH the playlists' own EPG
         // (kept for compatibility) and the standalone EPG sources — by epgChannelId across all ids.

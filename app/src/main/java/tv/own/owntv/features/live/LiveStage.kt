@@ -460,6 +460,8 @@ internal fun LiveCategories(
     onSearchQueryChange: ((String) -> Unit)? = null,
     /** The category search is being typed in (the player's sheet then leaves ◀ to the text cursor). */
     onSearchEditingChange: (Boolean) -> Unit = {},
+    /** Top-right actions in the panel header (the section dock when the left rail is off). */
+    headerActions: (@Composable () -> Unit)? = null,
 ) {
     var localQuery by remember { mutableStateOf("") }
     val query = searchQuery ?: localQuery
@@ -519,8 +521,19 @@ internal fun LiveCategories(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(sheetTitle, style = stageText(26, 800), color = StageColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Text(sheetHint, style = stageText(17, 400), color = StageColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.mpx))
+                if (headerActions != null) {
+                    Box(Modifier.padding(start = 12.mpx)) { headerActions() }
+                } else {
+                    Text(sheetHint, style = stageText(17, 400), color = StageColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.mpx))
+                }
             }
+        } else if (headerActions != null) {
+            // The categories column has no title row of its own; the dock sits where a title would go.
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 10.mpx),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) { headerActions() }
         }
         // Edge-only scrolling, as the channel list (no double step on ▼).
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides edgeScrollSpec) {

@@ -37,7 +37,7 @@ import tv.own.owntv.core.live.GuideReader
 import tv.own.owntv.core.live.GuideSlot
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.repository.ActiveProfileSources
-import tv.own.owntv.core.repository.activeProfileSources
+import tv.own.owntv.features.live.activeLiveProfileSources
 import tv.own.owntv.core.settings.SettingsRepository
 import tv.own.owntv.core.sync.local.LocalSyncManager
 import tv.own.owntv.core.sync.local.PairedDevice
@@ -123,7 +123,7 @@ class MoreCountsViewModel(
     val lastUpdateCheckAt: StateFlow<Long?> = settings.lastUpdateCheckAt
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val ctx: StateFlow<ActiveProfileSources> = activeProfileSources(settings, sourceDao)
+    private val ctx: StateFlow<ActiveProfileSources> = activeLiveProfileSources(settings, sourceDao)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActiveProfileSources(-1L, emptyList()))
 
     /** How many playlists the active profile shows. */

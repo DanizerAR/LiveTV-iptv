@@ -92,6 +92,8 @@ class OwnTVApp : Application(), SingletonImageLoader.Factory, androidx.work.Conf
     override fun onCreate() {
         Perf.begin() // zero-point for the OwnTVPerf startup timeline (adb logcat -s OwnTVPerf)
         super.onCreate()
+        // Read the live-TV rail/playlist choices before the shell composes its first frame.
+        tv.own.owntv.features.live.LiveUiStore.init(this)
         // The six icon colours are MainActivity + a suffix (see MainActivityColours.kt); core switches them.
         // Before the early returns: auto start opens the app from its bare process through this name.
         tv.own.owntv.core.brand.AppIconSwitcher.mainActivityClass = MainActivity::class.java.name

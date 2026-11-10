@@ -36,7 +36,7 @@ import tv.own.owntv.core.content.SearchKind
 import tv.own.owntv.core.content.SearchReader
 import tv.own.owntv.core.content.SearchResults
 import tv.own.owntv.core.repository.ActiveProfileSources
-import tv.own.owntv.core.repository.activeProfileSources
+import tv.own.owntv.features.live.activeLiveProfileSources
 import tv.own.owntv.core.settings.SettingsRepository
 
 /**
@@ -59,7 +59,7 @@ class SearchViewModel(
     // Observe the active profile's sources reactively so adding/removing a playlist refreshes Search
     // immediately (was read once at startup, so a new playlist showed nothing until app restart).
     // Per-section Off flags split the id sets so an Off section never surfaces in results.
-    private val ctx: StateFlow<ActiveProfileSources> = activeProfileSources(settings, sourceDao)
+    private val ctx: StateFlow<ActiveProfileSources> = activeLiveProfileSources(settings, sourceDao)
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, ActiveProfileSources(-1L, emptyList()))
 

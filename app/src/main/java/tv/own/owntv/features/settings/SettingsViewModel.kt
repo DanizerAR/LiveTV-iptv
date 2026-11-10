@@ -244,8 +244,9 @@ class SettingsViewModel(
         viewModelScope.launch { settings.setDownloadRoot(path) }
     }
 
-    /** The source marked as default/active (shown in the sidebar). */
-    val defaultSourceId: StateFlow<Long> = settings.defaultSourceId
+    /** The single playlist currently shown, or -1 when the picker is on All/multiple. */
+    val defaultSourceId: StateFlow<Long> = tv.own.owntv.features.live.LiveUiStore.playlistIds
+        .map { if (it.size == 1) it.first() else -1L }
         .stateIn(viewModelScope, SharingStarted.Eagerly, -1L)
 
     fun setDefaultSource(id: Long) {
@@ -658,12 +659,8 @@ class SettingsViewModel(
     ): List<tv.own.owntv.core.database.entity.ChannelEntity> {
         if (profileId < 0L) return emptyList()
         val sources = sourceDao.observeForProfile(profileId).first().filter { it.syncLive }
-        val defaultSourceId = settings.defaultSourceId.first()
-        val sourceIds = if (defaultSourceId > 0L && sources.any { it.id == defaultSourceId }) {
-            listOf(defaultSourceId)
-        } else {
-            sources.map { it.id }
-        }
+        val selected = tv.own.owntv.features.live.LiveUiStore.playlistIds.value
+        val sourceIds = sources.map { it.id }.let { ids -> if (selected.isEmpty()) ids else ids.filter { it in selected } }
         if (sourceIds.isEmpty()) return emptyList()
         val customizations = customizationStore.observeVisible(profileId, tv.own.owntv.core.model.MediaType.LIVE).first()
         val isKids = profileDao.getById(profileId)?.isKids == true
@@ -1153,12 +1150,15 @@ class SettingsViewModel(
             )
             sourceEditor.save(existing, updated)
             settings.setPlaylistAutoRefresh(id, autoRefresh)
-            // Apply the "Default playlist" toggle: on → this becomes the active playlist; off → if this was
-            // the default, clear it back to All. Leaves another playlist's default untouched.
-            when {
-                isDefault -> settings.setDefaultSource(id)
-                settings.defaultSourceId.first() == id -> settings.setDefaultSource(-1L)
+            // Apply the "Default playlist" toggle: on → this is the playlist the Live screen shows;
+            // off → back to All. Core's single-default setting is kept out of the way, because the
+            // top-bar picker owns multi-playlist selection in this build.
+            if (isDefault) {
+                tv.own.owntv.features.live.LiveUiStore.setPlaylistIds(setOf(id))
+            } else if (tv.own.owntv.features.live.LiveUiStore.playlistIds.value == setOf(id)) {
+                tv.own.owntv.features.live.LiveUiStore.setPlaylistIds(emptySet())
             }
+            settings.setDefaultSource(-1L)
             // Hidden sections must drop from the Android TV launcher immediately.
             runCatching { refreshActiveTvHome(allowBrowsableRequest = true) }
         }
@@ -1431,6 +1431,9 @@ class SettingsViewModel(
                 withContext(NonCancellable) {
                     sourceRepository.deleteSource(source)
                     if (defaultSourceId.value == source.id) settings.setDefaultSource(-1L)
+                    tv.own.owntv.features.live.LiveUiStore.setPlaylistIds(
+                        tv.own.owntv.features.live.LiveUiStore.playlistIds.value - source.id,
+                    )
                     refreshActiveTvHome(allowBrowsableRequest = true)
                 }
             } finally {

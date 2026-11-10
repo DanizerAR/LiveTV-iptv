@@ -285,7 +285,7 @@ open class MainActivity : ComponentActivity() {
             val profileName by viewModel.profileName.collectAsStateWithLifecycle()
             val sourceSummary by viewModel.sourceSummary.collectAsStateWithLifecycle()
             val playlists by viewModel.playlists.collectAsStateWithLifecycle()
-            val activePlaylistId by viewModel.activePlaylistId.collectAsStateWithLifecycle()
+            val selectedPlaylistIds by viewModel.selectedPlaylistIds.collectAsStateWithLifecycle()
             val weather by viewModel.weather.collectAsStateWithLifecycle()
             val weatherFahrenheit by viewModel.weatherFahrenheit.collectAsStateWithLifecycle()
             val selectedSection by viewModel.selectedSection.collectAsStateWithLifecycle()
@@ -476,8 +476,8 @@ open class MainActivity : ComponentActivity() {
                                 profileName = profileName,
                                 sourceSummary = sourceSummary,
                                 playlists = playlists,
-                                activePlaylistId = activePlaylistId,
-                                onSelectPlaylist = viewModel::setActivePlaylist,
+                                selectedPlaylistIds = selectedPlaylistIds,
+                                onSelectPlaylists = viewModel::setPlaylistFilter,
                                 weatherInfo = weather,
                                 weatherFahrenheit = weatherFahrenheit,
                                 activeProfileId = activeProfileId,

@@ -25,7 +25,7 @@ import tv.own.owntv.core.database.dao.SourceDao
 import tv.own.owntv.core.model.DownloadStatus
 import tv.own.owntv.core.model.MediaType
 import tv.own.owntv.core.nav.MainSection
-import tv.own.owntv.core.repository.activeProfileSources
+import tv.own.owntv.features.live.activeLiveProfileSources
 import tv.own.owntv.core.settings.SettingsRepository
 import tv.own.owntv.core.categorylock.lockAwareCount
 import tv.own.owntv.core.categorylock.recheckedOn
@@ -66,7 +66,7 @@ class RailCountsViewModel(
     customize: CustomizationStore,
 ) : ViewModel() {
 
-    val counts: StateFlow<Map<MainSection, Int>> = activeProfileSources(settings, sourceDao)
+    val counts: StateFlow<Map<MainSection, Int>> = activeLiveProfileSources(settings, sourceDao)
         .flatMapLatest { c ->
             if (c.profileId < 0) return@flatMapLatest flowOf(emptyMap())
             // An empty id list would make the IN clause meaningless; -1 matches nothing.
