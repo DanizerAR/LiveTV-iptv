@@ -1363,11 +1363,13 @@ fun OwnTVShell(
                             // With the rail off, the categories panel carries the two buttons that
                             // stay: Settings, and the Guide.
                             navDock = if (!railVisible) {
-                                {
+                                { first, back ->
                                     tv.own.owntv.features.shell.components.ShellTopButtons(
                                         section = MainSection.LIVE_TV,
                                         onOpenSettings = { openSettingsWindow() },
                                         onSwitchSection = { section -> onSelectSection(section) },
+                                        firstFocus = first,
+                                        previousFocus = back,
                                     )
                                 }
                             } else null,

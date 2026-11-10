@@ -489,8 +489,13 @@ internal fun LiveCategories(
     onSearchQueryChange: ((String) -> Unit)? = null,
     /** The category search is being typed in (the player's sheet then leaves ◀ to the text cursor). */
     onSearchEditingChange: (Boolean) -> Unit = {},
-    /** Top-right actions in the panel header (the section dock when the left rail is off). */
-    headerActions: (@Composable () -> Unit)? = null,
+    /**
+     * Top-right actions beside the category search (the section dock when the left rail is off).
+     * The slot is handed the requesters the panel needs to keep the buttons reachable: [first] is the
+     * first button (the search's ▶ goes there), [back] is the search field (the buttons' ◀ comes
+     * back to it).
+     */
+    headerActions: (@Composable (first: FocusRequester, back: FocusRequester) -> Unit)? = null,
 ) {
     var localQuery by remember { mutableStateOf("") }
     val query = searchQuery ?: localQuery
@@ -501,6 +506,8 @@ internal fun LiveCategories(
     }
     val rowFocusers = remember(visible.size) { List(visible.size) { FocusRequester() } }
     val searchFocus = remember { FocusRequester() }
+    // The first of the panel's own buttons, so the search's ▶ reaches it.
+    val headerFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // CH+/− in the categories changes the selection; the highlight follows it there.
     var hasFocus by remember { mutableStateOf(false) }
@@ -576,6 +583,14 @@ internal fun LiveCategories(
                     }
                 }
                 .trapVerticalFocusExit()
+                // With the panel's own buttons beside the search, ◀ reaches them: the left rail is
+                // off, so the buttons are what is to the left of the categories.
+                .then(
+                    if (headerActions == null) Modifier else Modifier.onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown || e.key != Key.DirectionLeft) return@onPreviewKeyEvent false
+                        runCatching { headerFocus.requestFocus() }.getOrDefault(false)
+                    },
+                )
                 .focusGroup(),
             // Room for the 2 px outer focus ring, which the list would otherwise clip.
             contentPadding = PaddingValues(start = 4.mpx, end = 4.mpx, top = 4.mpx, bottom = 8.mpx),
@@ -599,13 +614,18 @@ internal fun LiveCategories(
                             .padding(start = if (sheet) 8.mpx else 0.mpx, end = if (sheet) 8.mpx else 0.mpx, bottom = if (sheet) 14.mpx else 16.mpx)
                             .focusRequester(searchFocus)
                             // With buttons beside it, ▶ goes to them; without, it goes to the channels.
-                            .then(if (query.isEmpty() && headerActions == null) rightKey else Modifier),
+                            .then(if (query.isEmpty() && headerActions == null) rightKey else Modifier)
+                            // …and with them, ▶ always reaches the first of them, whatever the
+                            // spatial search would find.
+                            .then(if (headerActions != null) Modifier.focusProperties { next = headerFocus } else Modifier),
                         height = if (sheet) 54.mpx else 48.mpx,
                         radius = if (sheet) 16.mpx else 15.mpx,
                         horizontalPadding = if (sheet) 16.mpx else 18.mpx,
                     )
                     if (headerActions != null) {
-                        Box(Modifier.padding(bottom = if (sheet) 14.mpx else 16.mpx)) { headerActions() }
+                        Box(Modifier.padding(bottom = if (sheet) 14.mpx else 16.mpx)) {
+                            headerActions(headerFocus, searchFocus)
+                        }
                     }
                 }
             }

@@ -111,8 +111,11 @@ fun LiveScreen(
     playlistLabel: String? = null,
     /** Opens the playlist picker from the Live TV section itself. */
     onOpenPlaylistPicker: () -> Unit = {},
-    /** Section switcher shown in the categories header when the left rail is turned off. */
-    navDock: (@Composable () -> Unit)? = null,
+    /**
+     * Section switcher shown beside the category search when the left rail is turned off. The slot
+     * is handed the panel's focus requesters: the first button, and the search field to come back to.
+     */
+    navDock: (@Composable (first: androidx.compose.ui.focus.FocusRequester, back: androidx.compose.ui.focus.FocusRequester) -> Unit)? = null,
 ) {
     val vm: LiveViewModel = koinViewModel()
     val lockVm: tv.own.owntv.features.categorylock.CategoryLockViewModel = koinViewModel()
@@ -660,7 +663,7 @@ fun LiveScreen(
                 onRowFocus = { catFocusIndex = it },
                 searchQuery = categoryQuery,
                 onSearchQueryChange = vm::setCategoryQuery,
-                headerActions = navDock,
+                headerActions = if (navDock != null) { { first, back -> navDock(first, back) } } else null,
                 modifier = categoriesModifier
                     .padding(start = margin, top = 128.mpx, bottom = 24.mpx)
                     .width(colW)
@@ -966,7 +969,7 @@ fun LiveScreen(
                 onRowFocus = { catFocusIndex = it },
                 searchQuery = categoryQuery,
                 onSearchQueryChange = vm::setCategoryQuery,
-                headerActions = navDock,
+                headerActions = if (navDock != null) { { first, back -> navDock(first, back) } } else null,
                 modifier = categoriesModifier
                     .padding(start = fx(24), top = 24.mpx, bottom = 24.mpx)
                     .width(sheetW)

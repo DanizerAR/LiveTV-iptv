@@ -9,6 +9,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -33,6 +36,10 @@ fun ShellTopButtons(
     onOpenSettings: () -> Unit,
     onSwitchSection: (MainSection) -> Unit,
     modifier: Modifier = Modifier,
+    /** The first button, so the panel's search can hand the focus to it. */
+    firstFocus: FocusRequester? = null,
+    /** Where the first button's ◀ goes: the search field it sits beside. */
+    previousFocus: FocusRequester? = null,
 ) {
     val other = if (section == MainSection.EPG) MainSection.LIVE_TV else MainSection.EPG
     Row(
@@ -44,23 +51,34 @@ fun ShellTopButtons(
             icon = OwnTVIcon.SETTINGS,
             description = stringResource(tv.own.owntv.core.R.string.common_nav_settings),
             onClick = onOpenSettings,
+            focus = firstFocus,
+            previous = previousFocus,
         )
         TopButton(
             icon = other.stageIcon,
             description = stringResource(other.labelRes),
             onClick = { onSwitchSection(other) },
+            previous = firstFocus,
         )
     }
 }
 
 @Composable
-private fun TopButton(icon: OwnTVIcon, description: String, onClick: () -> Unit) {
+private fun TopButton(
+    icon: OwnTVIcon,
+    description: String,
+    onClick: () -> Unit,
+    focus: FocusRequester? = null,
+    previous: FocusRequester? = null,
+) {
     val a = stageAccent
     StageSurface(
         onClick = onClick,
         radius = 14.mpx,
         modifier = Modifier
             .size(44.mpx)
+            .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+            .then(if (previous != null) Modifier.focusProperties { this.previous = previous } else Modifier)
             .semantics { contentDescription = description },
         idle = Modifier.background(a.accent.copy(alpha = 0.14f), RoundedCornerShape(14.mpx)),
         contentAlignment = Alignment.Center,
