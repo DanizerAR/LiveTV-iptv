@@ -433,7 +433,6 @@ class EpgViewModel(
         // is triggered by the screen.
         combine(settings.defaultSourceId, LiveUiStore.playlistIds) { _, _ -> Unit }
             .drop(1)
-            .distinctUntilChanged()
             .onEach { load() }
             .launchIn(viewModelScope)
         // Reload when the guide's own data changes underneath an open screen — a feed added,
