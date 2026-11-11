@@ -327,6 +327,7 @@ fun SettingsScreen(
     val hideEmptyCategories by tv.own.owntv.features.live.LiveUiStore.hideEmptyCategories.collectAsStateWithLifecycle()
     val mergeSameNameCategories by tv.own.owntv.features.live.LiveUiStore.mergeSameNameCategories.collectAsStateWithLifecycle()
     val settingsBackdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
+    val panelHandles by tv.own.owntv.features.live.LiveUiStore.panelHandles.collectAsStateWithLifecycle()
     val rememberLastLive by settingsVm.rememberLastLive.collectAsStateWithLifecycle()
     val rememberLastMovies by settingsVm.rememberLastMovies.collectAsStateWithLifecycle()
     val rememberLastSeries by settingsVm.rememberLastSeries.collectAsStateWithLifecycle()
@@ -640,6 +641,14 @@ fun SettingsScreen(
         ),
         *stageLayoutRows(settingsVm, stageSettings) { saveScroll(); dialogReturn = it }.toTypedArray(),
         RootRow(
+            "panel_handles", TileTone.SECONDARY, OwnTVIcon.MOVE,
+            title = stringResource(R.string.settings_panel_handles),
+            desc = stringResource(R.string.settings_panel_handles_description),
+            chip = stringResource(if (panelHandles) R.string.common_on else R.string.common_off),
+            chipTone = if (panelHandles) TileTone.PRIMARY else TileTone.SECONDARY,
+            onClick = { tv.own.owntv.features.live.LiveUiStore.setPanelHandles(!panelHandles) },
+        ),
+        RootRow(
             tabRowKey(SettingsTab.PANEL_WIDTH), TileTone.PRIMARY, OwnTVIcon.PANEL_WIDTH,
             title = stringResource(R.string.settings_panel_width),
             desc = stringResource(R.string.settings_panel_width_description),
@@ -918,6 +927,10 @@ fun SettingsScreen(
             SettingsSearchEntry(stringResource(R.string.settings_group_sources), stringResource(R.string.settings_reminders), stringResource(R.string.settings_search_keywords_reminders), OwnTVIcon.BELL, TileTone.SECONDARY) { saveScroll(); dialogReturn = searchFieldFocus; stageSettings.open = StageSettingsDialog.REMINDERS },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_ch_paging), stringResource(R.string.settings_search_keywords_ch), OwnTVIcon.CH_NAV, TileTone.PRIMARY,
                 chip = if (chNavEnabled) stringResource(R.string.common_on) else stringResource(R.string.common_off), chipTone = if (chNavEnabled) TileTone.PRIMARY else TileTone.SECONDARY) { open(SettingsTab.CH_NAV) },
+            SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_panel_handles), stringResource(R.string.settings_panel_handles_description), OwnTVIcon.MOVE, TileTone.SECONDARY,
+                chip = stringResource(if (panelHandles) R.string.common_on else R.string.common_off), chipTone = if (panelHandles) TileTone.PRIMARY else TileTone.SECONDARY) {
+                tv.own.owntv.features.live.LiveUiStore.setPanelHandles(!panelHandles)
+            },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_panel_width), stringResource(R.string.settings_search_keywords_panel_width), OwnTVIcon.PANEL_WIDTH, TileTone.PRIMARY,
                 chip = if (panelWidthCustom) stringResource(R.string.settings_live_latency_custom) else stringResource(R.string.settings_subtitle_default), chipTone = if (panelWidthCustom) TileTone.PRIMARY else TileTone.SECONDARY) { open(SettingsTab.PANEL_WIDTH) },
         SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_guide_width), stringResource(R.string.settings_search_keywords_guide_width), OwnTVIcon.EPG, TileTone.PRIMARY,

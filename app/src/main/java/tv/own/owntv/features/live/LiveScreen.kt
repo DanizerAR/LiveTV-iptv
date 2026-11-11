@@ -646,6 +646,8 @@ fun LiveScreen(
     // Manual panel widths (Settings → Layout → Panel widths), mapped onto Stage: Category = the sheet
     // (Stage) or the column (Separate), List and Preview split the rest; Preview 0% = full-width list.
     val panelShares = rememberPanelShares(PanelSection.LIVE, settingsVm)
+    // The grab handles between the panels: hidden on request (Settings → Layout).
+    val panelHandles by tv.own.owntv.features.live.LiveUiStore.panelHandles.collectAsStateWithLifecycle()
     // The Stage layout has its own set: the sheet on its own scale, list + preview = 100.
     val panelOn by settingsVm.panelWidthEnabled.getValue(PanelSection.LIVE).collectAsStateWithLifecycle()
     val stageSaved by settingsVm.liveStageWidths.collectAsStateWithLifecycle()
@@ -866,7 +868,7 @@ fun LiveScreen(
                 ) {
                     // The grab handles: the one by the search resizes the categories column, the
                     // one at the end resizes the preview.
-                    if (separate) {
+                    if (separate && panelHandles) {
                         PanelSplitter(
                             onStep = { step -> resizePanels(0, step) },
                             modifier = Modifier.size(12.mpx, 48.mpx),
@@ -913,7 +915,7 @@ fun LiveScreen(
                         icon = OwnTVIcon.GRID,
                         onClick = onOpenGuide,
                     )
-                    if (separate && previewShown) {
+                    if (separate && previewShown && panelHandles) {
                         PanelSplitter(
                             onStep = { step -> resizePanels(1, step) },
                             modifier = Modifier.size(12.mpx, 48.mpx),

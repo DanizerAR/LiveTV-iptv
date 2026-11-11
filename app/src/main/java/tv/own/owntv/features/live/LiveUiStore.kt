@@ -33,6 +33,7 @@ object LiveUiStore {
     private const val KEY_BACKDROP = "settings_backdrop"
     private const val KEY_BACKDROP_DIM = "settings_backdrop_dim"
     private const val KEY_BACKDROP_GLASS = "settings_backdrop_glass"
+    private const val KEY_PANEL_HANDLES = "panel_grab_handles"
 
     private lateinit var prefs: android.content.SharedPreferences
 
@@ -56,6 +57,10 @@ object LiveUiStore {
     private val _settingsBackdrop = MutableStateFlow(SettingsBackdrop(dim = 78, glass = false))
     val settingsBackdrop: StateFlow<SettingsBackdrop> = _settingsBackdrop.asStateFlow()
 
+    /** The grab handles between the Live TV panels: shown by default, hidden on request. */
+    private val _panelHandles = MutableStateFlow(true)
+    val panelHandles: StateFlow<Boolean> = _panelHandles.asStateFlow()
+
     fun init(context: Context) {
         if (::prefs.isInitialized) return
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -68,6 +73,7 @@ object LiveUiStore {
             dim = prefs.getInt(KEY_BACKDROP_DIM, 78).coerceIn(0, 100),
             glass = prefs.getBoolean(KEY_BACKDROP_GLASS, false),
         )
+        _panelHandles.value = prefs.getBoolean(KEY_PANEL_HANDLES, true)
     }
 
     fun setRailVisible(visible: Boolean) {
@@ -104,6 +110,12 @@ object LiveUiStore {
         val clean = dim.coerceIn(0, 100)
         _settingsBackdrop.value = _settingsBackdrop.value.copy(dim = clean)
         if (::prefs.isInitialized) prefs.edit { putInt(KEY_BACKDROP_DIM, clean) }
+    }
+
+    /** Whether the grab handles between the Live TV panels are drawn. */
+    fun setPanelHandles(shown: Boolean) {
+        _panelHandles.value = shown
+        if (::prefs.isInitialized) prefs.edit { putBoolean(KEY_PANEL_HANDLES, shown) }
     }
 
     /** The window's own frosted surface, over the dimming. */

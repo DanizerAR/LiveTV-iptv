@@ -23,4 +23,6 @@
     <string name="live_go_to_channel">Go to channel</string>
     <string name="live_type_channel_number">Type a channel number</string>
     <string name="live_no_channel">No channel %1$d</string>
+    <string name="settings_panel_handles">Panel grab handles</string>
+    <string name="settings_panel_handles_description">The small handles that resize the Live TV panels.</string>
 </resources>
