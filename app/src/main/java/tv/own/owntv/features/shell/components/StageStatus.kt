@@ -71,6 +71,8 @@ fun StageStatusCluster(
     pillsFocusable: Boolean,
     /** The first of the pills, so the content can hand the focus to them (the provider, the last channel). */
     pillsFocusRequester: FocusRequester? = null,
+    /** Where the pills go when the user leaves them again (▼, or ◀ out of the leftmost one). */
+    contentFocusRequester: FocusRequester? = null,
     weatherInfo: WeatherInfo?,
     weatherFahrenheit: Boolean,
     clockColors: ClockColors,
@@ -96,7 +98,13 @@ fun StageStatusCluster(
                     onClick = continuePill.onClick,
                     modifier = Modifier
                         .then(if (pillsFocusRequester != null) Modifier.focusRequester(pillsFocusRequester) else Modifier)
-                        .focusProperties { canFocus = pillsFocusable },
+                        .focusProperties {
+                            canFocus = pillsFocusable
+                            if (contentFocusRequester != null) {
+                                down = contentFocusRequester
+                                left = contentFocusRequester
+                            }
+                        },
                 )
             }
             StagePill(
@@ -112,6 +120,7 @@ fun StageStatusCluster(
                     .focusProperties {
                         canFocus = pillsFocusable
                         if (playlistDownFocusRequester != null) down = playlistDownFocusRequester
+                        else if (contentFocusRequester != null) down = contentFocusRequester
                     },
             )
         }

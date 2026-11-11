@@ -20,4 +20,7 @@
     <string name="live_playlist_tool">Playlist</string>
     <string name="live_preview_actions">Channel actions</string>
     <string name="live_now_next">Now and next</string>
+    <string name="live_go_to_channel">Go to channel</string>
+    <string name="live_type_channel_number">Type a channel number</string>
+    <string name="live_no_channel">No channel %1$d</string>
 </resources>

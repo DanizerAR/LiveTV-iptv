@@ -55,7 +55,9 @@ fun SettingsOverlay(
         // A window that lets the D-pad wander into the picture behind it is not a window.
         Box(Modifier.fillMaxSize().trapAllFocusExit()) {
             BackHandler { onBack() }
-            Column(Modifier.fillMaxSize()) {
+            // The window is inset on every side: it is a window over the picture, not a page that
+            // runs into the bezel.
+            Column(Modifier.fillMaxSize().padding(48.mpx)) {
                 BackButton(onBack)
                 Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }

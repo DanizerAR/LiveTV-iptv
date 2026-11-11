@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -107,12 +108,7 @@ fun LiveScreen(
     lockedKey: LiveKey? = null,
     /** Guide view (Live TV tool row): opens the TV Guide until an in-place guide exists. */
     onOpenGuide: () -> Unit = {},
-    /** The playlists this list merges; null = one playlist, nothing to choose. */
-    playlistLabel: String? = null,
-    /** Opens the playlist picker from the Live TV section itself. */
-    onOpenPlaylistPicker: () -> Unit = {},
-    /** Hands the focus to the top-bar pills (last channel, provider). */
-    onFocusStatusPills: () -> Unit = {},
+
     /**
      * Section switcher shown beside the category search when the left rail is turned off. The slot
      * is handed the panel's focus requesters: the first button, and the search field to come back to.
@@ -555,6 +551,13 @@ fun LiveScreen(
     // Whether the tool row (search, playlist, sort, guide) holds the focus: from there ▲ may leave
     // the pane for the top-bar pills.
     var toolRowFocused by remember { mutableStateOf(false) }
+    // The third panel's first control: ▶ from a channel row goes there.
+    val previewFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val focusPreview: () -> Boolean = { runCatching { previewFocus.requestFocus() }.getOrDefault(false) }
+    // The number strip: the digits typed on the remote, and the channel they point at.
+    var typedNumber by remember { mutableStateOf(String()) }
+    var numberMiss by remember { mutableStateOf<Int?>(null) }
+    var numberStripOn by remember { mutableStateOf(false) }
     // Moving the highlight over a category shows that category's channels: the list follows the
     // highlight, so looking down the categories is looking down the channels. It waits a moment
     // first, so a held ▼ does not reload the list on every row it passes.
@@ -590,6 +593,41 @@ fun LiveScreen(
             currentTargetIndex = { catFocusIndex ?: selectedIndex },
             onJumpToIndex = { idx -> catFocusIndex = idx; railFocusRow = idx },
         )
+    // Jump to a channel by its number: the list scrolls to it and focuses it, so the preview
+    // follows it like any other highlight. A number that is not in this list opens the channel's
+    // own category and reveals it there.
+    val jumpToChannel: (ChannelEntity) -> Unit = { ch ->
+        scope.launch {
+            val idx = channels.itemSnapshotList.items.indexOfFirst { it.id == ch.id }
+            if (idx >= 0) {
+                runCatching { effectiveListState.scrollToItem(idx) }
+                withFrameNanos { }
+                runCatching { rowFocus(idx).requestFocus() }
+            } else {
+                vm.revealChannel(ch)
+            }
+        }
+    }
+    // Typing a digit jumps as you go: "2" goes to the first channel numbered 2xx, "25" to 25.
+    LaunchedEffect(typedNumber) {
+        val n = typedNumber.toIntOrNull() ?: return@LaunchedEffect
+        if (n <= 0) return@LaunchedEffect
+        val ch = vm.channelByNumber(n)
+        if (ch == null) {
+            numberMiss = n
+        } else {
+            numberMiss = null
+            jumpToChannel(ch)
+        }
+    }
+    // The digits fade a few seconds after the last one.
+    LaunchedEffect(typedNumber, numberMiss) {
+        if (typedNumber.isEmpty()) return@LaunchedEffect
+        delay(3_500)
+        typedNumber = String()
+        numberMiss = null
+        numberStripOn = false
+    }
     val onCategorySelect: (Int) -> Unit = { idx ->
         val item = railItems.getOrNull(idx)
         item?.let { vm.select(it.key) }
@@ -611,6 +649,31 @@ fun LiveScreen(
     // The Stage layout has its own set: the sheet on its own scale, list + preview = 100.
     val panelOn by settingsVm.panelWidthEnabled.getValue(PanelSection.LIVE).collectAsStateWithLifecycle()
     val stageSaved by settingsVm.liveStageWidths.collectAsStateWithLifecycle()
+        // The splitters: focus one and ◀ ▶ resize the panels beside it. Using one turns the
+        // custom panel widths on (Settings → Layout → Panel widths), which is where they live.
+        val resizePanels: (Int, Int) -> Unit = { which, step ->
+            val cur = panelShares
+            if (cur != null) {
+                // The widths snap to core's 5 % steps, so a step is one of those.
+                val moved = step * tv.own.owntv.core.settings.PanelWidthLimits.STEP
+                val next = when (which) {
+                    0 -> cur.copy(
+                        category = tv.own.owntv.core.settings.PanelWidthLimits.snap(cur.category + moved),
+                        list = cur.list - moved,
+                    )
+                    else -> cur.copy(
+                        preview = tv.own.owntv.core.settings.PanelWidthLimits.snapPreview(cur.preview + moved),
+                        list = cur.list - moved,
+                    )
+                }
+                settingsVm.setPanelWidths(
+                    tv.own.owntv.core.settings.PanelSection.LIVE,
+                    true,
+                    tv.own.owntv.core.settings.balanceToTotal(next),
+                )
+            }
+        }
+
     val stageWidths = stageSaved.takeIf { panelOn && !separate }
     BoxWithConstraints(
         modifier = modifier
@@ -685,6 +748,35 @@ fun LiveScreen(
                 .fillMaxSize()
                 .then(if (categoriesOpen) Modifier.graphicsLayer { alpha = 0.4f } else Modifier),
         ) {
+            // The digits typed for the number strip, over the list panel's top right corner.
+            if (numberStripOn || typedNumber.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .offset(x = listX + listWidth - 250.mpx, y = fx(56))
+                        .width(240.mpx),
+                    contentAlignment = Alignment.TopEnd,
+                ) {
+                    Box(
+                        Modifier
+                            .background(
+                                tv.own.owntv.ui.theme.StageColors.ControlFill,
+                                androidx.compose.foundation.shape.RoundedCornerShape(12.mpx),
+                            )
+                            .padding(horizontal = 16.mpx, vertical = 10.mpx),
+                    ) {
+                        Text(
+                            text = when {
+                                numberMiss != null -> stringResource(R.string.live_no_channel, numberMiss!!)
+                                typedNumber.isEmpty() -> stringResource(R.string.live_type_channel_number)
+                                else -> typedNumber
+                            },
+                            style = tv.own.owntv.ui.theme.stageText(22, 800),
+                            color = if (numberMiss != null) tv.own.owntv.ui.theme.StageColors.Danger else tv.own.owntv.ui.theme.StageColors.Text,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
             LiveHeader(
                 category = headerLabel,
                 count = count.takeUnless { selectedItem?.sealed == true },
@@ -694,10 +786,19 @@ fun LiveScreen(
             // Header tools + channel list: one focus group.
             Column(
                 modifier = Modifier
-                    .padding(start = listX, top = 118.mpx)
+                    .padding(start = listX, top = 128.mpx)
                     .width(listWidth)
                     .fillMaxHeight()
                     .onFocusChanged { channelPaneFocused = it.hasFocus }
+                    // The number strip: digits typed here jump to that channel number. The search
+                    // field keeps its own digits while it is being typed into.
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown || searchEditing) return@onPreviewKeyEvent false
+                        val digit = digitKey(e.nativeKeyEvent.keyCode) ?: return@onPreviewKeyEvent false
+                        typedNumber = (typedNumber + digit).takeLast(4)
+                        numberStripOn = true
+                        true
+                    }
                     .chNavPaging(
                         enabled = chNavEnabled,
                         upSkip = chNavUpSkip,
@@ -763,6 +864,14 @@ fun LiveScreen(
                     modifier = Modifier.padding(start = 4.mpx).focusGroup()
                         .onFocusChanged { toolRowFocused = it.hasFocus },
                 ) {
+                    // The grab handles: the one by the search resizes the categories column, the
+                    // one at the end resizes the preview.
+                    if (separate) {
+                        PanelSplitter(
+                            onStep = { step -> resizePanels(0, step) },
+                            modifier = Modifier.size(12.mpx, 48.mpx),
+                        )
+                    }
                     tv.own.owntv.ui.stage.StageSearchField(
                         query = searchQuery,
                         onQueryChange = vm::setSearchQuery,
@@ -777,15 +886,6 @@ fun LiveScreen(
                             // ◀ Categories from the search field too, as from the rows (not while typing — a search that found nothing here may be in another category).
                             .onDpadLeft({ !searchEditing && lockedKey == null }) { openCategories() },
                     )
-                    // The playlists this list merges, and the way to choose others: the Live TV
-                    // section's own playlist switch, so it is never a hunt through the top bar.
-                    if (playlistLabel != null) {
-                        tv.own.owntv.ui.stage.StageTool(
-                            text = playlistLabel,
-                            icon = OwnTVIcon.PLAYLIST,
-                            onClick = onOpenPlaylistPicker,
-                        )
-                    }
                     tv.own.owntv.ui.stage.StageTool(
                         text = null,
                         icon = OwnTVIcon.SORT,
@@ -804,10 +904,21 @@ fun LiveScreen(
                         },
                     )
                     tv.own.owntv.ui.stage.StageTool(
+                        text = stringResource(R.string.live_go_to_channel),
+                        icon = OwnTVIcon.LIST_GRID,
+                        onClick = { numberStripOn = true; typedNumber = String() },
+                    )
+                    tv.own.owntv.ui.stage.StageTool(
                         text = stringResource(R.string.content_live_guide_view),
                         icon = OwnTVIcon.GRID,
                         onClick = onOpenGuide,
                     )
+                    if (separate && previewShown) {
+                        PanelSplitter(
+                            onStep = { step -> resizePanels(1, step) },
+                            modifier = Modifier.size(12.mpx, 48.mpx),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(20.mpx))
                 if (channels.itemCount == 0) {
@@ -881,10 +992,10 @@ fun LiveScreen(
                                                 lockedKey != null -> false
                                                 else -> { openCategories(); true }
                                             }
-                                            // ▶ goes to the top-bar pills (last channel, provider) —
-                                            // the panel on the right of the list is not a page.
+                                            // ▶ goes to the third panel — the preview. With no preview
+                                            // on screen there is nothing there, so nothing happens.
                                             androidx.compose.ui.input.key.Key.DirectionRight -> {
-                                                onFocusStatusPills(); true
+                                                focusPreview(); true
                                             }
                                             // The remote's Info key still opens the Program details page.
                                             androidx.compose.ui.input.key.Key.Info -> {
@@ -940,6 +1051,7 @@ fun LiveScreen(
                     { enteringMoveMode = true; vm.enterMoveMode(ch, selectedKey) }
                 },
                 onCatchup = previewChannel?.takeIf { it.catchup }?.let { ch -> { catchupChannel = ch } },
+                focusRequester = previewFocus,
                 // The programme details live under the picture, not on a page of their own.
                 details = programmeDetails?.let { ch ->
                     {
@@ -954,7 +1066,7 @@ fun LiveScreen(
                     }
                 },
                 modifier = Modifier
-                    .padding(start = screenW - margin - stageW, top = 120.mpx)
+                    .padding(start = screenW - margin - stageW, top = 128.mpx)
                     .width(stageW),
             )
         }
@@ -971,6 +1083,29 @@ fun LiveScreen(
                 onPlayFromStart = { p -> vm.playCatchupProgramme(ch, p); if (!externalPlayerOn) onFullscreen() },
                 onDismiss = { programmeDetails = null; scope.launch { restoreToContextRow() } },
             )
+        }
+
+        // The number strip: 1-9-0 down the gap between the categories and the list, where the
+        // channel numbers themselves are printed. It shows while the list has the focus, and while
+        // digits are being typed.
+        if (separate && (numberStripOn || channelPaneFocused)) {
+            Column(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = margin + colW + 4.mpx, y = fx(140))
+                    .width(gapCat - 8.mpx),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.mpx),
+            ) {
+                listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 0).forEach { d ->
+                    Text(
+                        d.toString(),
+                        style = tv.own.owntv.ui.theme.stageText(15, 700),
+                        color = if (typedNumber.endsWith(d.toString())) tv.own.owntv.ui.theme.stageAccent.accent else tv.own.owntv.ui.theme.StageColors.Dim,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
 
         if (categoriesOpen) {
@@ -1585,4 +1720,11 @@ internal fun liveEpgShiftLabel(minutes: Int): String {
             number.format(remainder),
         )
     }
+}
+
+/** The digit a key press carries, or null for any other key. */
+private fun digitKey(keyCode: Int): Int? = when (keyCode) {
+    in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> keyCode - android.view.KeyEvent.KEYCODE_0
+    in android.view.KeyEvent.KEYCODE_NUMPAD_0..android.view.KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - android.view.KeyEvent.KEYCODE_NUMPAD_0
+    else -> null
 }

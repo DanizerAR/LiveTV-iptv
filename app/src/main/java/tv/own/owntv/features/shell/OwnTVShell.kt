@@ -1360,13 +1360,7 @@ fun OwnTVShell(
                             previewEnabled = playerMode == PlayerMode.NONE,
                             restoreFocus = restoreFocus,
                             onRestored = { restoreFocus = false },
-                            // The playlists this list merges, and the way to choose others. It is
-                            // there even with one playlist: that is where the playlist is chosen.
-                            playlistLabel = playlistLabel,
-                            onOpenPlaylistPicker = { showPlaylistPicker = true },
-                            // ▶ on a channel row goes to the top-bar pills (last channel, provider),
-                            // not to a page.
-                            onFocusStatusPills = { runCatching { statusPillsFocus.requestFocus() } },
+                            // The playlist is chosen from the top-right pill, beside "last channel".
                             // With the rail off, the categories panel carries the two buttons that
                             // stay: Settings, and the Guide.
                             navDock = if (!railVisible) {
@@ -1461,11 +1455,14 @@ fun OwnTVShell(
                 },
                 audioBar = audioBarContent,
                 playlistLabel = playlistLabel,
-                playlistInteractive = playlists.size > 1,
+                // The provider pill always opens the playlist picker, even with one playlist:
+                // it is the way to choose a playlist from inside Live TV.
+                playlistInteractive = true,
                 onPlaylistClick = { showPlaylistPicker = true },
                 // Out of reach from deep in a list: from the rail or on Home only.
                 pillsFocusable = true,
                 pillsFocusRequester = statusPillsFocus,
+                contentFocusRequester = contentAreaFocus,
                 weatherInfo = weatherInfo,
                 weatherFahrenheit = weatherFahrenheit,
                 clockColors = clockColors,

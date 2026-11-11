@@ -1107,6 +1107,21 @@ class LiveViewModel(
         _search.value = query
     }
 
+    /**
+     * The channel with this provider number among the playlists on screen, or null.
+     *
+     * The number strip's lookup: the number the user types is the number the provider prints on
+     * the row, so this is the same number they can see. Hidden channels and hidden categories are
+     * left out, as everywhere else.
+     */
+    suspend fun channelByNumber(number: Int): ChannelEntity? = withContext(Dispatchers.IO) {
+        val c = ctx.value
+        if (c.profileId < 0L || c.sourceIds.isEmpty()) return@withContext null
+        val hidden = hiddenCategoryIds.value
+        val cust = custom.value
+        channelDao.findByNumber(c.sourceIds, number).firstOrNull { isChannelVisible(it, cust, hidden) }
+    }
+
     fun onChannelFocused(channel: ChannelEntity) {
         // The list followed the highlight over a category: the preview keeps playing what it was
         // playing. Re-tuning the stream for every category the highlight passes costs a request and

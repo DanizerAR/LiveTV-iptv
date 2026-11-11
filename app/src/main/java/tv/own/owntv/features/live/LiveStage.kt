@@ -4,6 +4,7 @@ import tv.own.owntv.ui.theme.stageTone
 import tv.own.owntv.ui.theme.stageShadow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -257,6 +258,8 @@ internal fun LiveStagePane(
      * belong to the channel in the pane, so they are read there rather than on a page of their own.
      */
     details: (@Composable () -> Unit)? = null,
+    /** The pane's first control, so the channel list can hand the focus to the third panel. */
+    focusRequester: FocusRequester? = null,
 ) {
     val previewState by previewEngine.state.collectAsStateWithLifecycle()
     val streamChips by previewEngine.streamChips.collectAsStateWithLifecycle()
@@ -367,6 +370,7 @@ internal fun LiveStagePane(
                             text = stringResource(if (isFavorite) R.string.content_remove_favourite else R.string.content_add_favourite),
                             icon = OwnTVIcon.FAVORITE,
                             onClick = it,
+                            modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
                         )
                     }
                     onMove?.let {
@@ -418,6 +422,35 @@ internal val edgeScrollSpec = object : androidx.compose.foundation.gestures.Brin
             else -> trailing
         }
     }
+}
+
+/**
+ * The handle between two panels: focus it and ◀ ▶ resize the panels, the way a desktop window
+ * can be dragged. It is a thin line until it has the focus, and it draws the accent when it does.
+ */
+@Composable
+internal fun PanelSplitter(
+    onStep: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier
+            .focusable()
+            .onFocusChanged { focused = it.hasFocus }
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (e.key) {
+                    Key.DirectionLeft -> { onStep(-1); true }
+                    Key.DirectionRight -> { onStep(1); true }
+                    else -> false
+                }
+            }
+            .background(
+                if (focused) stageAccent.accent.copy(alpha = 0.9f) else StageColors.Dim.copy(alpha = 0.28f),
+                RoundedCornerShape(6.mpx),
+            ),
+    )
 }
 
 /** A category as the Stage sheet / column shows it: the rail item, its parsed name and its count. */
