@@ -1087,28 +1087,9 @@ fun LiveScreen(
             )
         }
 
-        // The number strip: 1-9-0 down the gap between the categories and the list, where the
-        // channel numbers themselves are printed. It shows while the list has the focus, and while
-        // digits are being typed.
-        if (separate && (numberStripOn || channelPaneFocused)) {
-            Column(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .offset(x = margin + colW + 4.mpx, y = fx(140))
-                    .width(gapCat - 8.mpx),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.mpx),
-            ) {
-                listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 0).forEach { d ->
-                    Text(
-                        d.toString(),
-                        style = tv.own.owntv.ui.theme.stageText(15, 700),
-                        color = if (typedNumber.endsWith(d.toString())) tv.own.owntv.ui.theme.stageAccent.accent else tv.own.owntv.ui.theme.StageColors.Dim,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
+        // The number strip itself is not drawn: a column of digits down the gap looked like
+        // part of the list. The jump still works — type a number and the list goes to that
+        // channel — and the digits you typed show over the list's top right corner.
 
         if (categoriesOpen) {
             LiveCategories(
