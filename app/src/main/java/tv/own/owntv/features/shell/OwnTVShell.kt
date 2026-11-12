@@ -2131,13 +2131,7 @@ fun OwnTVShell(
     // The channel number being typed, in the screen's lower right corner. It is the app's own
     // badge, not part of any panel: it says what the remote is saying, wherever you are.
     if (typedNumber.isNotEmpty() || numberMiss != null) {
-        val badgeSize = tv.own.owntv.features.live.LiveUiStore.numberBadgeSize.collectAsStateWithLifecycle().value
-        val textSize = when (badgeSize) {
-            0 -> 22
-            1 -> 30
-            2 -> 40
-            else -> 52
-        }
+        val textSize = 30
         Box(
             Modifier
                 .align(Alignment.BottomEnd)

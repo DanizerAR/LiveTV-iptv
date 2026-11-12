@@ -34,8 +34,7 @@ object LiveUiStore {
     private const val KEY_BACKDROP_DIM = "settings_backdrop_dim"
     private const val KEY_BACKDROP_GLASS = "settings_backdrop_glass"
     private const val KEY_PANEL_HANDLES = "panel_grab_handles"
-    private const val KEY_NUMBER_BADGE_SIZE = "number_badge_size"
-    private const val KEY_SETTINGS_PADDING = "settings_window_padding"
+
 
     private lateinit var prefs: android.content.SharedPreferences
 
@@ -59,14 +58,6 @@ object LiveUiStore {
     private val _settingsBackdrop = MutableStateFlow(SettingsBackdrop(dim = 78, glass = false))
     val settingsBackdrop: StateFlow<SettingsBackdrop> = _settingsBackdrop.asStateFlow()
 
-    /** How big the typed-channel-number badge is drawn (0 = small … 3 = huge). */
-    private val _numberBadgeSize = MutableStateFlow(1)
-    val numberBadgeSize: StateFlow<Int> = _numberBadgeSize.asStateFlow()
-
-    /** The Settings window's inset, in pixels. */
-    private val _settingsPadding = MutableStateFlow(48)
-    val settingsPadding: StateFlow<Int> = _settingsPadding.asStateFlow()
-
     /** The grab handles between the Live TV panels: shown by default, hidden on request. */
     private val _panelHandles = MutableStateFlow(true)
     val panelHandles: StateFlow<Boolean> = _panelHandles.asStateFlow()
@@ -84,8 +75,6 @@ object LiveUiStore {
             glass = prefs.getBoolean(KEY_BACKDROP_GLASS, false),
         )
         _panelHandles.value = prefs.getBoolean(KEY_PANEL_HANDLES, true)
-        _numberBadgeSize.value = prefs.getInt(KEY_NUMBER_BADGE_SIZE, 1).coerceIn(0, 3)
-        _settingsPadding.value = prefs.getInt(KEY_SETTINGS_PADDING, 48).coerceIn(0, 96)
     }
 
     fun setRailVisible(visible: Boolean) {
@@ -122,20 +111,6 @@ object LiveUiStore {
         val clean = dim.coerceIn(0, 100)
         _settingsBackdrop.value = _settingsBackdrop.value.copy(dim = clean)
         if (::prefs.isInitialized) prefs.edit { putInt(KEY_BACKDROP_DIM, clean) }
-    }
-
-    /** How big the typed-channel-number badge is drawn (0 = small … 3 = huge). */
-    fun setNumberBadgeSize(size: Int) {
-        val clean = size.coerceIn(0, 3)
-        _numberBadgeSize.value = clean
-        if (::prefs.isInitialized) prefs.edit { putInt(KEY_NUMBER_BADGE_SIZE, clean) }
-    }
-
-    /** The Settings window's inset, in pixels. */
-    fun setSettingsPadding(padding: Int) {
-        val clean = padding.coerceIn(0, 96)
-        _settingsPadding.value = clean
-        if (::prefs.isInitialized) prefs.edit { putInt(KEY_SETTINGS_PADDING, clean) }
     }
 
     /** Whether the grab handles between the Live TV panels are drawn. */

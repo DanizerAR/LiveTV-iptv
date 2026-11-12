@@ -25,9 +25,4 @@
     <string name="live_no_channel">No channel %1$d</string>
     <string name="settings_panel_handles">Panel grab handles</string>
     <string name="settings_panel_handles_description">The small handles that resize the Live TV panels.</string>
-    <string name="settings_number_badge_size">Number badge size</string>
-    <string name="settings_number_badge_size_description">How big the channel number you type is drawn.</string>
-    <string name="settings_window_padding">Settings window padding</string>
-    <string name="settings_window_padding_description">How much space the Settings window keeps from the screen edges.</string>
-    <string name="settings_padding_pixels">%1$d px</string>
 </resources>

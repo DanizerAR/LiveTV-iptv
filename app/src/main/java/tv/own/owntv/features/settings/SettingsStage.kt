@@ -413,19 +413,24 @@ fun androidx.compose.foundation.layout.ColumnScope.PanelChoices(picker: PanelPic
     val recommended = help?.choices?.getOrNull(help.recommended)
     val first = remember { FocusRequester() }
     val search = remember { FocusRequester() }
+    val panelFocus = remember { FocusRequester() }
     val list = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (selIndex - 2).coerceAtLeast(0))
     androidx.compose.runtime.LaunchedEffect(Unit) {
         // The list is composed in the frame the row is clicked; focus it once it is placed. It can
         // take a couple of frames more when the page it sits in has just been drawn (the Settings
-        // window over the live picture), so the request is repeated until it lands.
-        repeat(10) {
-            kotlinx.coroutines.delay(60)
-            if (runCatching { (if (picker.searchable) search else first).requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+        // window over the live picture), so the request is repeated until it lands. Focus the first
+        // choice row so OK and ▲▼ work immediately; fall back to the panel itself if that node
+        // isn't composed yet.
+        repeat(12) {
+            kotlinx.coroutines.delay(50)
+            val target = if (picker.searchable) search else first
+            if (runCatching { target.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+            if (runCatching { panelFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
         }
     }
     SettingPanelHeading(stringResource(R.string.settings_panel_choices))
     Column(
-        Modifier.weight(1f, fill = false).trapAllFocusExit().focusGroup().onPreviewKeyEvent { e ->
+        Modifier.weight(1f, fill = false).trapAllFocusExit().focusGroup().focusRequester(panelFocus).onPreviewKeyEvent { e ->
             if (e.key == Key.DirectionLeft && e.type == KeyEventType.KeyDown) { onDismiss(); true } else false
         },
     ) {
@@ -1039,7 +1044,14 @@ class StageAction(
 @Composable
 fun StageActionColumn(actions: List<StageAction>, back: FocusRequester?, first: FocusRequester? = null) {
     val a = stageAccent
-    Column(Modifier.padding(top = 20.mpx), verticalArrangement = Arrangement.spacedBy(8.mpx)) {
+    val panelFocus = remember { FocusRequester() }
+    Column(
+        Modifier
+            .padding(top = 20.mpx)
+            .focusRequester(panelFocus)
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(8.mpx),
+    ) {
         actions.forEachIndexed { i, act ->
             var longAt by remember { mutableLongStateOf(0L) }
             StageSurface(
@@ -1072,6 +1084,13 @@ fun StageActionColumn(actions: List<StageAction>, back: FocusRequester?, first: 
                     OwnTVIcon(act.icon, if (focused) a.onAccent else if (act.danger) StageColors.Danger else a.accent, Modifier.size(20.mpx))
                     Text(act.label, style = stageText(18, 700), color = c, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+            }
+        }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            repeat(12) {
+                kotlinx.coroutines.delay(50)
+                val target = first ?: panelFocus
+                if (runCatching { target.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
             }
         }
     }

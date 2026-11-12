@@ -59,8 +59,7 @@ fun SettingsOverlay(
             BackHandler { onBack() }
             // The window is inset on every side: it is a window over the picture, not a page that
             // runs into the bezel. How much inset is the user's call (Settings → Layout).
-            val padding = tv.own.owntv.features.live.LiveUiStore.settingsPadding.collectAsStateWithLifecycle().value
-            Column(Modifier.fillMaxSize().padding(padding.mpx)) {
+            Column(Modifier.fillMaxSize().padding(48.mpx)) {
                 BackButton(onBack)
                 Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }
