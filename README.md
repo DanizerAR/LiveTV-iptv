@@ -1,3 +1,9 @@
+> **This repository is the Live M3U build** — the OwnTV player trimmed to live TV and M3U
+> playlists only (no movies, series, sports or downloads), with a three-panel Live screen, a
+> hideable navigation rail and a typed channel-number jump.
+> The baseline for further work is the tag [`live-m3u-2026-11-12`](https://github.com/DanizerAR/LiveTV-iptv/releases/tag/live-m3u-2026-11-12);
+> see [README-LIVE-M3U.md](README-LIVE-M3U.md) for what it contains and how to rebuild it.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="extras/brand/app-logos/logo_eggshell_light.png">
