@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.tv.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -214,6 +215,12 @@ fun OwnTVShell(
     // The top-bar pills (last channel · provider): the content hands the focus to them, so they
     // are focusable in every section and not only when the rail holds the focus.
     val statusPillsFocus = remember { FocusRequester() }
+    // The channel number typed on the remote, and the channel it points at. It works in every
+    // section: the number jumps to the channel and opens Live TV on it.
+    var typedNumber by remember { mutableStateOf(String()) }
+    var numberMiss by remember { mutableStateOf<Int?>(null) }
+    // A search field owns the digits while it is being typed into.
+    var searchEditing by remember { mutableStateOf(false) }
     val railVm = org.koin.androidx.compose.koinViewModel<RailCountsViewModel>()
     val railCounts by railVm.counts.collectAsStateWithLifecycle()
     val railDetails by railVm.details.collectAsStateWithLifecycle()
@@ -273,6 +280,21 @@ fun OwnTVShell(
     // up/down (CH+/CH-). Guide tunes start through LiveViewModel too (they set zapSource = LIVE_TV), so
     // there is exactly ONE zap path: liveVm's. The Guide keeps its own EpgViewModel only for the grid.
     val liveVm = org.koin.androidx.compose.koinViewModel<LiveViewModel>()
+    // A channel number typed anywhere: Live TV opens on that channel and focuses it.
+    val jumpToChannelNumber: (Int) -> Unit = { number ->
+        scope.launch {
+            val channel = liveVm.channelByNumber(number)
+            if (channel == null) {
+                numberMiss = number
+                return@launch
+            }
+            numberMiss = null
+            typedNumber = String()
+            if (selectedSection != MainSection.LIVE_TV) onSelectSection(MainSection.LIVE_TV)
+            liveVm.revealChannel(channel)
+        }
+    }
+
     // "Previous" from the system media controls on a live channel goes back a channel.
     DisposableEffect(playbackSession, liveVm) {
         playbackSession.livePrevious = { liveVm.previousChannel() }
@@ -1033,6 +1055,19 @@ fun OwnTVShell(
                     if (e.key == Key.DirectionLeft || e.key == Key.DirectionRight) railKeyAt = android.os.SystemClock.uptimeMillis()
                     // A key pressed on the rail is the user using it, however focus got there.
                     if (railHasFocus) railFocused = true
+                    // A channel number typed anywhere in the app. A search field owns its digits
+                    // while it is being typed into, and so do the two search screens.
+                    if (!searchEditing &&
+                        selectedSection != MainSection.SETTINGS &&
+                        selectedSection != MainSection.SEARCH
+                    ) {
+                        val digit = digitKey(e.nativeKeyEvent.keyCode)
+                        if (digit != null) {
+                            typedNumber = (typedNumber + digit).takeLast(4)
+                            typedNumber.toIntOrNull()?.let { jumpToChannelNumber(it) }
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                 }
                 if (e.key != Key.Back) return@onPreviewKeyEvent false
                 when (e.type) {
@@ -1361,6 +1396,7 @@ fun OwnTVShell(
                             restoreFocus = restoreFocus,
                             onRestored = { restoreFocus = false },
                             // The playlist is chosen from the top-right pill, beside "last channel".
+                            onSearchEditingChange = { searchEditing = it },
                             // With the rail off, the categories panel carries the two buttons that
                             // stay: Settings, and the Guide.
                             navDock = if (!railVisible) {
@@ -2016,6 +2052,14 @@ fun OwnTVShell(
         }
       }
 
+    // The digits fade a few seconds after the last one.
+    LaunchedEffect(typedNumber, numberMiss) {
+        if (typedNumber.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(3_500)
+        typedNumber = String()
+        numberMiss = null
+    }
+
     // The Settings window: an overlay on the live picture, with the sections (or one section) in it.
     if (selectedSection == MainSection.MORE || selectedSection == MainSection.SETTINGS) {
         val backdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
@@ -2080,6 +2124,39 @@ fun OwnTVShell(
                     },
                 )
             }
+        }
+    }
+
+    // The channel number being typed, in the screen's lower right corner. It is the app's own
+    // badge, not part of any panel: it says what the remote is saying, wherever you are.
+    if (typedNumber.isNotEmpty() || numberMiss != null) {
+        val badgeSize = tv.own.owntv.features.live.LiveUiStore.numberBadgeSize.collectAsStateWithLifecycle().value
+        val textSize = when (badgeSize) {
+            0 -> 22
+            1 -> 30
+            2 -> 40
+            else -> 52
+        }
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 64.mpx, bottom = 48.mpx)
+                .background(
+                    tv.own.owntv.ui.theme.StageColors.ControlFill,
+                    androidx.compose.foundation.shape.RoundedCornerShape(14.mpx),
+                )
+                .padding(horizontal = 20.mpx, vertical = 12.mpx),
+        ) {
+            Text(
+                text = when {
+                    numberMiss != null -> stringResource(R.string.live_no_channel, numberMiss!!)
+                    typedNumber.isEmpty() -> stringResource(R.string.live_type_channel_number)
+                    else -> typedNumber
+                },
+                style = tv.own.owntv.ui.theme.stageText(textSize, 800),
+                color = if (numberMiss != null) tv.own.owntv.ui.theme.StageColors.Danger else tv.own.owntv.ui.theme.StageColors.Text,
+                maxLines = 1,
+            )
         }
     }
 
@@ -2212,3 +2289,10 @@ private fun railDetail(section: MainSection, d: RailDetails): String? = when (se
 
 /** How recently ◀ / ▶ or [focusRail] must have happened for a rail visit to open the rail. */
 private const val RAIL_KEY_WINDOW_MS = 400L
+
+/** The digit a key press carries, or null for any other key. */
+private fun digitKey(keyCode: Int): Int? = when (keyCode) {
+    in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> keyCode - android.view.KeyEvent.KEYCODE_0
+    in android.view.KeyEvent.KEYCODE_NUMPAD_0..android.view.KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - android.view.KeyEvent.KEYCODE_NUMPAD_0
+    else -> null
+}

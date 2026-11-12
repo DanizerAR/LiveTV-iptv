@@ -328,6 +328,8 @@ fun SettingsScreen(
     val mergeSameNameCategories by tv.own.owntv.features.live.LiveUiStore.mergeSameNameCategories.collectAsStateWithLifecycle()
     val settingsBackdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
     val panelHandles by tv.own.owntv.features.live.LiveUiStore.panelHandles.collectAsStateWithLifecycle()
+    val numberBadgeSize by tv.own.owntv.features.live.LiveUiStore.numberBadgeSize.collectAsStateWithLifecycle()
+    val settingsPadding by tv.own.owntv.features.live.LiveUiStore.settingsPadding.collectAsStateWithLifecycle()
     val rememberLastLive by settingsVm.rememberLastLive.collectAsStateWithLifecycle()
     val rememberLastMovies by settingsVm.rememberLastMovies.collectAsStateWithLifecycle()
     val rememberLastSeries by settingsVm.rememberLastSeries.collectAsStateWithLifecycle()
@@ -641,6 +643,35 @@ fun SettingsScreen(
         ),
         *stageLayoutRows(settingsVm, stageSettings) { saveScroll(); dialogReturn = it }.toTypedArray(),
         RootRow(
+            "number_badge_size", TileTone.SECONDARY, OwnTVIcon.LIST_GRID,
+            title = stringResource(R.string.settings_number_badge_size),
+            desc = stringResource(R.string.settings_number_badge_size_description),
+            value = tv.own.owntv.features.settings.SettingValue.Stepper(
+                stringResource(R.string.common_percent, 60 + numberBadgeSize * 40),
+            ),
+            onStep = { step ->
+                tv.own.owntv.features.live.LiveUiStore.setNumberBadgeSize(numberBadgeSize + step)
+            },
+            onClick = {
+                tv.own.owntv.features.live.LiveUiStore.setNumberBadgeSize((numberBadgeSize + 1) % 4)
+            },
+        ),
+        RootRow(
+            "settings_padding", TileTone.SECONDARY, OwnTVIcon.EXPAND,
+            title = stringResource(R.string.settings_window_padding),
+            desc = stringResource(R.string.settings_window_padding_description),
+            value = tv.own.owntv.features.settings.SettingValue.Stepper(
+                stringResource(R.string.settings_padding_pixels, settingsPadding),
+            ),
+            onStep = { step ->
+                tv.own.owntv.features.live.LiveUiStore.setSettingsPadding(settingsPadding + step * 12)
+            },
+            onClick = {
+                val next = paddingStops.firstOrNull { it > settingsPadding } ?: paddingStops.first()
+                tv.own.owntv.features.live.LiveUiStore.setSettingsPadding(next)
+            },
+        ),
+        RootRow(
             "panel_handles", TileTone.SECONDARY, OwnTVIcon.MOVE,
             title = stringResource(R.string.settings_panel_handles),
             desc = stringResource(R.string.settings_panel_handles_description),
@@ -927,6 +958,15 @@ fun SettingsScreen(
             SettingsSearchEntry(stringResource(R.string.settings_group_sources), stringResource(R.string.settings_reminders), stringResource(R.string.settings_search_keywords_reminders), OwnTVIcon.BELL, TileTone.SECONDARY) { saveScroll(); dialogReturn = searchFieldFocus; stageSettings.open = StageSettingsDialog.REMINDERS },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_ch_paging), stringResource(R.string.settings_search_keywords_ch), OwnTVIcon.CH_NAV, TileTone.PRIMARY,
                 chip = if (chNavEnabled) stringResource(R.string.common_on) else stringResource(R.string.common_off), chipTone = if (chNavEnabled) TileTone.PRIMARY else TileTone.SECONDARY) { open(SettingsTab.CH_NAV) },
+            SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_number_badge_size), stringResource(R.string.settings_number_badge_size_description), OwnTVIcon.LIST_GRID, TileTone.SECONDARY,
+                chip = stringResource(R.string.common_percent, 60 + numberBadgeSize * 40), chipTone = TileTone.SECONDARY) {
+                tv.own.owntv.features.live.LiveUiStore.setNumberBadgeSize((numberBadgeSize + 1) % 4)
+            },
+            SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_window_padding), stringResource(R.string.settings_window_padding_description), OwnTVIcon.EXPAND, TileTone.SECONDARY,
+                chip = stringResource(R.string.settings_padding_pixels, settingsPadding), chipTone = TileTone.SECONDARY) {
+                val next = paddingStops.firstOrNull { it > settingsPadding } ?: paddingStops.first()
+                tv.own.owntv.features.live.LiveUiStore.setSettingsPadding(next)
+            },
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_panel_handles), stringResource(R.string.settings_panel_handles_description), OwnTVIcon.MOVE, TileTone.SECONDARY,
                 chip = stringResource(if (panelHandles) R.string.common_on else R.string.common_off), chipTone = if (panelHandles) TileTone.PRIMARY else TileTone.SECONDARY) {
                 tv.own.owntv.features.live.LiveUiStore.setPanelHandles(!panelHandles)
@@ -1460,6 +1500,9 @@ private fun liveLayoutLabelRes(layout: tv.own.owntv.core.settings.SettingsReposi
 /** The dimming the window's slider walks in, and the stops OK cycles through. */
 private const val BACKDROP_STEP = 5
 private val backdropStops = listOf(0, 40, 78, 100)
+
+/** The insets the Settings window's padding steps through. */
+private val paddingStops = listOf(0, 24, 48, 72, 96)
 
 @Composable
 private fun LiveLayoutDialog(settingsVm: SettingsViewModel, onClose: () -> Unit) {

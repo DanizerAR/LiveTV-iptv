@@ -1,6 +1,7 @@
 package tv.own.owntv.features.shell.components
 
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,8 +58,9 @@ fun SettingsOverlay(
         Box(Modifier.fillMaxSize().trapAllFocusExit()) {
             BackHandler { onBack() }
             // The window is inset on every side: it is a window over the picture, not a page that
-            // runs into the bezel.
-            Column(Modifier.fillMaxSize().padding(48.mpx)) {
+            // runs into the bezel. How much inset is the user's call (Settings → Layout).
+            val padding = tv.own.owntv.features.live.LiveUiStore.settingsPadding.collectAsStateWithLifecycle().value
+            Column(Modifier.fillMaxSize().padding(padding.mpx)) {
                 BackButton(onBack)
                 Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }
