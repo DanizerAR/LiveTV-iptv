@@ -80,7 +80,6 @@ import tv.own.owntv.features.settings.NO_ARGS
 import tv.own.owntv.features.settings.LanguageSettingsScreen
 import tv.own.owntv.features.settings.LanguageSettingsViewModel
 import tv.own.owntv.core.settings.SettingsRepository
-import tv.own.owntv.features.update.UpdateDialog
 import tv.own.owntv.features.settings.BackupScreen
 import tv.own.owntv.features.settings.ManageSourcesScreen
 import tv.own.owntv.features.settings.SettingsViewModel
@@ -169,7 +168,6 @@ fun SettingsScreen(
     var showTheme by remember { mutableStateOf(false) }
     var showAccent by remember { mutableStateOf(false) }
     var showFocusHighlight by remember { mutableStateOf(false) }
-    var showUpdate by remember { mutableStateOf(false) }
     var showCatchupTime by remember { mutableStateOf(false) }
     // Per-playlist catch-up time zone: the playlist list, then the value picker for [catchupSource].
     var showCatchupSources by remember { mutableStateOf(false) }
@@ -262,13 +260,13 @@ fun SettingsScreen(
         }
         onStartConsumed()
     }
-    val anyDialogOpen = showZoom || showPopupSize || showTheme || showAccent || showUpdate || showCatchupTime || showCatchupSources || showCatchupSourceValue || showEpgOffset || showGuideDays || showAnimations || showStartup || showStartupChannelPicker || showAfrWarning || showLivePreviewPanelWarning || showBgImageChooser || showBgPicker || showAmbientGlow || showFocusHighlight || showBgRemote || showVodLayout || showNavigation || showLiveLayout || stageSettings.open != null || settingsLock.open
+    val anyDialogOpen = showZoom || showPopupSize || showTheme || showAccent || showCatchupTime || showCatchupSources || showCatchupSourceValue || showEpgOffset || showGuideDays || showAnimations || showStartup || showStartupChannelPicker || showAfrWarning || showLivePreviewPanelWarning || showBgImageChooser || showBgPicker || showAmbientGlow || showFocusHighlight || showBgRemote || showVodLayout || showNavigation || showLiveLayout || stageSettings.open != null || settingsLock.open
     // When a dialog closes, restore focus to the row that opened it. NOTE: this restore crosses
     // INTO the root focus group from outside (the dialog), but onEnter does NOT fire for programmatic
     // requestsFocus (only for directional entry) — so dialogReturn must be cleared HERE, not in onEnter.
     // If it's left set, the next directional entry (e.g. sidebar→here) would re-route to a stale row.
     var dialogReturn by remember { mutableStateOf<FocusRequester?>(null) }
-    LaunchedEffect(showZoom, showPopupSize, showTheme, showAccent, showUpdate, showCatchupTime, showCatchupSources, showCatchupSourceValue, showEpgOffset, showGuideDays, showAnimations, showStartup, showStartupChannelPicker, showAfrWarning, showLivePreviewPanelWarning, showBgImageChooser, showBgPicker, showAmbientGlow, showFocusHighlight, showBgRemote, showVodLayout, showNavigation, showLiveLayout, stageSettings.open, settingsLock.open) {
+    LaunchedEffect(showZoom, showPopupSize, showTheme, showAccent, showCatchupTime, showCatchupSources, showCatchupSourceValue, showEpgOffset, showGuideDays, showAnimations, showStartup, showStartupChannelPicker, showAfrWarning, showLivePreviewPanelWarning, showBgImageChooser, showBgPicker, showAmbientGlow, showFocusHighlight, showBgRemote, showVodLayout, showNavigation, showLiveLayout, stageSettings.open, settingsLock.open) {
         // Only after a popup really closed: on first composition there is no opener, and holding a stale
         // offset for the settle frames bounced the page.
         if (!anyDialogOpen && dialogReturn != null) {
@@ -292,7 +290,6 @@ fun SettingsScreen(
     val autoFrameRateLive by settingsVm.autoFrameRateLive.collectAsStateWithLifecycle()
     val surroundMode by settingsVm.surroundMode.collectAsStateWithLifecycle()
     val autoPlayNext by settingsVm.autoPlayNext.collectAsStateWithLifecycle()
-    val updateCheckOnStart by settingsVm.updateCheckOnStart.collectAsStateWithLifecycle()
     val channelNumbers by settingsVm.directTune.collectAsStateWithLifecycle()
     val quickPinned by settingsVm.quickPinnedKeys.collectAsStateWithLifecycle()
     val catchupTz by settingsVm.catchupTimezone.collectAsStateWithLifecycle()
@@ -1248,9 +1245,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showUpdate) {
-        UpdateDialog(onDismiss = { showUpdate = false }, checkOnOpen = true)
-    }
     if (showCatchupTime) CatchupTimeHost(settingsVm, catchupTz, catchupOffset, catchupPlayer) { showCatchupTime = false }
     if (showCatchupSources) {
         CatchupSourcesHost(playlistSources, catchupSource, onPick = { picked ->
@@ -2687,7 +2681,6 @@ private fun stageRowExtras(
         ),
         "app_icon" to RowExtra(SettingValue.Opens(stringResource(appIcon.label))),
         "brand_accent" to RowExtra(SettingValue.Switch(brandAccent), onClick = { vm.setBrandAccentTriangle(!brandAccent) }),
-        "check_updates" to RowExtra(SettingValue.Action(stringResource(R.string.settings_check_now))),
         "tab_LANGUAGE" to RowExtra(help = pluralStringResource(R.plurals.settings_help_language, languages, languages)),
     ) + serviceRowExtras(vm)
 }

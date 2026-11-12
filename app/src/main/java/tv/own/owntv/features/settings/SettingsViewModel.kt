@@ -583,8 +583,6 @@ class SettingsViewModel(
         viewModelScope.launch { settings.setExternalPlayer(section, enabled) }
     }
 
-    val updateCheckOnStart: StateFlow<Boolean> =
-        settings.updateCheckOnStart.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun setUpdateCheckOnStart(enabled: Boolean) { viewModelScope.launch { settings.setUpdateCheckOnStart(enabled) } }
 
     /** The Settings rows pinned to the Quick group, in display order. */

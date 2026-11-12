@@ -68,7 +68,6 @@ class ShellViewModel(
     internal val zapSource = mutableStateOf<MainSection?>(null)
 
     /** The startup update check runs once per launch, not once per shell composition. */
-    var startupUpdateCheckDone = false
 
     /** Relocks the categories the PIN opened when the app leaves the screen or the profile changes. */
     private val relock = CategoryRelock(viewModelScope, settings, customize, categoryUnlocks)

@@ -55,9 +55,6 @@ import tv.own.owntv.core.launcher.LauncherDeepLink
 import tv.own.owntv.core.nav.MainSection
 import tv.own.owntv.core.launcher.LauncherIntegrationRepository
 import tv.own.owntv.core.launcher.LauncherLaunch
-import tv.own.owntv.core.update.UpdateManager
-import tv.own.owntv.features.update.UpdateDialog
-import tv.own.owntv.features.update.UpdateStatusToast
 import tv.own.owntv.features.categorylock.rememberDueReminder
 import tv.own.owntv.features.downloads.DownloadsScreen
 import tv.own.owntv.features.epg.EpgScreen
@@ -286,12 +283,12 @@ fun OwnTVShell(
             val channel = liveVm.channelByNumber(number)
             if (channel == null) {
                 numberMiss = number
-                return@launch
+            } else {
+                numberMiss = null
+                if (selectedSection != MainSection.LIVE_TV) onSelectSection(MainSection.LIVE_TV)
+                liveVm.revealChannel(channel)
             }
-            numberMiss = null
             typedNumber = String()
-            if (selectedSection != MainSection.LIVE_TV) onSelectSection(MainSection.LIVE_TV)
-            liveVm.revealChannel(channel)
         }
     }
 
@@ -1061,10 +1058,16 @@ fun OwnTVShell(
                         selectedSection != MainSection.SETTINGS &&
                         selectedSection != MainSection.SEARCH
                     ) {
+                        // OK jumps at once, while the digits are still waiting to settle.
+                        if (typedNumber.isNotEmpty() &&
+                            (e.key == Key.Enter || e.key == Key.NumPadEnter)
+                        ) {
+                            typedNumber.toIntOrNull()?.takeIf { it > 0 }?.let { jumpToChannelNumber(it) }
+                            return@onPreviewKeyEvent true
+                        }
                         val digit = digitKey(e.nativeKeyEvent.keyCode)
                         if (digit != null) {
                             typedNumber = (typedNumber + digit).takeLast(4)
-                            typedNumber.toIntOrNull()?.let { jumpToChannelNumber(it) }
                             return@onPreviewKeyEvent true
                         }
                     }
@@ -2052,11 +2055,17 @@ fun OwnTVShell(
         }
       }
 
-    // The digits fade a few seconds after the last one.
-    LaunchedEffect(typedNumber, numberMiss) {
+    // The digits settle before the jump: typing 485 must not jump to channel 4 on the first key.
+    // OK jumps at once, for the hands that would rather not wait.
+    LaunchedEffect(typedNumber) {
         if (typedNumber.isEmpty()) return@LaunchedEffect
-        kotlinx.coroutines.delay(3_500)
-        typedNumber = String()
+        kotlinx.coroutines.delay(1_200)
+        typedNumber.toIntOrNull()?.takeIf { it > 0 }?.let { jumpToChannelNumber(it) }
+    }
+    // "No channel 485" clears itself.
+    LaunchedEffect(numberMiss) {
+        if (numberMiss == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(2_500)
         numberMiss = null
     }
 
@@ -2226,37 +2235,6 @@ fun OwnTVShell(
             )
     }
 
-        val updateManager = koinInject<UpdateManager>()
-        var showStartupToast by remember { mutableStateOf(false) }
-        var showChangelog by remember { mutableStateOf(false) }
-        val settingsRepo = koinInject<tv.own.owntv.core.settings.SettingsRepository>()
-        val updateCheckOnStart by settingsRepo.updateCheckOnStart.collectAsStateWithLifecycle(initialValue = false)
-        LaunchedEffect(updateCheckOnStart) {
-            // Once per launch: a rebuilt shell must not bring the "latest version" card back.
-            if (updateCheckOnStart && !showStartupToast && !shellVm.startupUpdateCheckDone) {
-                kotlinx.coroutines.delay(5_000)
-                shellVm.startupUpdateCheckDone = true
-                showStartupToast = true
-                updateManager.check()
-            }
-        }
-        if (showChangelog) {
-            // Full "What's New" changelog (same dialog the manual Settings check uses), shown when
-            // the startup card's "What's New" is pressed. No re-check — the release is already loaded.
-            val dismissChangelog: () -> Unit = {
-                showChangelog = false
-                showStartupToast = false
-                updateManager.reset()
-            }
-            UpdateDialog(onDismiss = dismissChangelog, checkOnOpen = false)
-        } else if (showStartupToast && selectedSection != MainSection.SETTINGS && playerMode == PlayerMode.NONE) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
-                UpdateStatusToast(
-                    onDone = { showStartupToast = false; updateManager.reset() },
-                    onViewChangelog = { showChangelog = true },
-                )
-            }
-        }
     }
     }
 }
