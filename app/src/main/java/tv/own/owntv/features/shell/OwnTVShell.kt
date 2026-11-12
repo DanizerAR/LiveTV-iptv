@@ -288,7 +288,6 @@ fun OwnTVShell(
                 if (selectedSection != MainSection.LIVE_TV) onSelectSection(MainSection.LIVE_TV)
                 liveVm.revealChannel(channel)
             }
-            typedNumber = String()
         }
     }
 
@@ -1058,16 +1057,12 @@ fun OwnTVShell(
                         selectedSection != MainSection.SETTINGS &&
                         selectedSection != MainSection.SEARCH
                     ) {
-                        // OK jumps at once, while the digits are still waiting to settle.
-                        if (typedNumber.isNotEmpty() &&
-                            (e.key == Key.Enter || e.key == Key.NumPadEnter)
-                        ) {
-                            typedNumber.toIntOrNull()?.takeIf { it > 0 }?.let { jumpToChannelNumber(it) }
-                            return@onPreviewKeyEvent true
-                        }
+                        // A digit goes to the channel it spells, and keeps building for a moment:
+                        // 4 jumps to channel 4, and 8 and 5 in quick succession make it 48 and 485.
                         val digit = digitKey(e.nativeKeyEvent.keyCode)
                         if (digit != null) {
-                            typedNumber = (typedNumber + digit).takeLast(4)
+                            typedNumber = (typedNumber + digit).takeLast(5)
+                            typedNumber.toIntOrNull()?.takeIf { it > 0 }?.let { jumpToChannelNumber(it) }
                             return@onPreviewKeyEvent true
                         }
                     }
@@ -2055,17 +2050,14 @@ fun OwnTVShell(
         }
       }
 
-    // The digits settle before the jump: typing 485 must not jump to channel 4 on the first key.
-    // OK jumps at once, for the hands that would rather not wait.
+    // The digits keep building for a moment after the last key, so a two- or three-digit number
+    // can still be typed; then they fade and the next digit starts a new number.
     LaunchedEffect(typedNumber) {
         if (typedNumber.isEmpty()) return@LaunchedEffect
-        kotlinx.coroutines.delay(1_200)
-        typedNumber.toIntOrNull()?.takeIf { it > 0 }?.let { jumpToChannelNumber(it) }
-    }
-    // "No channel 485" clears itself.
-    LaunchedEffect(numberMiss) {
-        if (numberMiss == null) return@LaunchedEffect
+        // Long enough for three digits to be typed in a row, short enough that the next number
+        // does not start on top of the last one.
         kotlinx.coroutines.delay(2_500)
+        typedNumber = String()
         numberMiss = null
     }
 
