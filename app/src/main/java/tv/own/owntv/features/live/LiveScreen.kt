@@ -32,8 +32,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -561,15 +563,20 @@ fun LiveScreen(
     // Moving the highlight over a category shows that category's channels: the list follows the
     // highlight, so looking down the categories is looking down the channels. It waits a moment
     // first, so a held ▼ does not reload the list on every row it passes.
-    LaunchedEffect(catFocusIndex, railItems) {
-        val idx = catFocusIndex ?: return@LaunchedEffect
-        val item = railItems.getOrNull(idx) ?: return@LaunchedEffect
-        if (item.sealed || item.key == selectedKey) return@LaunchedEffect
-        // Long enough that a held ▼ does not reload the list on every row it passes, and short
-        // enough that the list still feels like it follows the highlight.
-        delay(320)
-        if (catFocusIndex != idx) return@LaunchedEffect
-        vm.selectForHover(item.key)
+    //
+    // The highlight is tracked with snapshotFlow, not a LaunchedEffect key: reading the state in
+    // composition made every ▲/▼ recompose this whole screen (header, list and preview), which is
+    // what made walking the categories stutter while the channel list itself stayed smooth.
+    LaunchedEffect(railItems) {
+        snapshotFlow { catFocusIndex }.collectLatest { idx ->
+            if (idx == null) return@collectLatest
+            val item = railItems.getOrNull(idx) ?: return@collectLatest
+            if (item.sealed || item.key == selectedKey) return@collectLatest
+            // Long enough that a held ▼ does not reload the list on every row it passes, and short
+            // enough that the list still feels like it follows the highlight.
+            delay(320)
+            vm.selectForHover(item.key)
+        }
     }
     // Browsing the categories (or the search field) keeps the preview playing, like a TV: only picking
     // another channel or leaving Live TV changes it.

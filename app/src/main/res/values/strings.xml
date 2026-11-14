@@ -13,6 +13,9 @@
     <string name="settings_backdrop_glass">Glass panel</string>
     <string name="settings_backdrop_glass_description">A frosted panel over the picture, under the dimming.</string>
     <string name="settings_backdrop_transparent">Transparent</string>
+    <string name="settings_window_inset">Window inset</string>
+    <string name="settings_window_inset_description">The space between the Settings window and the screen edge, on every side.</string>
+    <string name="settings_window_inset_value">%1$d px</string>
     <string name="settings_hide_empty_categories">Hide empty categories</string>
     <string name="settings_hide_empty_categories_description">A category with no channels left is not listed.</string>
     <string name="settings_merge_categories">Merge same-name categories</string>

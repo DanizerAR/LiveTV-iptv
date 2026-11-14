@@ -7,10 +7,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * How the Settings window dims what is behind it: [dim] is how much black sits over the picture
- * (100 = opaque black, 0 = the picture untouched), and [glass] adds the window's frosted surface.
+ * How the Settings window sits over what is behind it: [dim] is how much black sits over the picture
+ * (100 = opaque black, 0 = the picture untouched), [glass] adds the window's frosted surface, and
+ * [inset] is the space, in design pixels, between the window's content and the screen edge.
  */
-data class SettingsBackdrop(val dim: Int, val glass: Boolean)
+data class SettingsBackdrop(val dim: Int, val glass: Boolean, val inset: Int = DEFAULT_INSET) {
+    companion object {
+        /** 48 design px, the inset the Settings window opens with. */
+        const val DEFAULT_INSET = 48
+    }
+}
 
 /**
  * Device-wide choices that only this live-TV build needs and core's settings store does not know:
@@ -33,7 +39,11 @@ object LiveUiStore {
     private const val KEY_BACKDROP = "settings_backdrop"
     private const val KEY_BACKDROP_DIM = "settings_backdrop_dim"
     private const val KEY_BACKDROP_GLASS = "settings_backdrop_glass"
+    private const val KEY_BACKDROP_INSET = "settings_window_padding"
     private const val KEY_PANEL_HANDLES = "panel_grab_handles"
+
+    /** The start of the window's edge-to-edge look: past this the rows would meet in the middle. */
+    private const val MAX_INSET = 120
 
 
     private lateinit var prefs: android.content.SharedPreferences
@@ -73,6 +83,7 @@ object LiveUiStore {
         _settingsBackdrop.value = SettingsBackdrop(
             dim = prefs.getInt(KEY_BACKDROP_DIM, 78).coerceIn(0, 100),
             glass = prefs.getBoolean(KEY_BACKDROP_GLASS, false),
+            inset = prefs.getInt(KEY_BACKDROP_INSET, SettingsBackdrop.DEFAULT_INSET).coerceIn(0, MAX_INSET),
         )
         _panelHandles.value = prefs.getBoolean(KEY_PANEL_HANDLES, true)
     }
@@ -123,6 +134,13 @@ object LiveUiStore {
     fun setSettingsBackdropGlass(glass: Boolean) {
         _settingsBackdrop.value = _settingsBackdrop.value.copy(glass = glass)
         if (::prefs.isInitialized) prefs.edit { putBoolean(KEY_BACKDROP_GLASS, glass) }
+    }
+
+    /** The gap between the Settings window's content and the screen edge, in design pixels. */
+    fun setSettingsBackdropInset(inset: Int) {
+        val clean = inset.coerceIn(0, MAX_INSET)
+        _settingsBackdrop.value = _settingsBackdrop.value.copy(inset = clean)
+        if (::prefs.isInitialized) prefs.edit { putInt(KEY_BACKDROP_INSET, clean) }
     }
 
     private fun parseIds(raw: String?): Set<Long> =

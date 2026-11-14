@@ -554,9 +554,17 @@ internal fun LiveCategories(
     val scope = rememberCoroutineScope()
     // CH+/− in the categories changes the selection; the highlight follows it there.
     var hasFocus by remember { mutableStateOf(false) }
+    // Which row holds the highlight right now (not which is selected: hovering a category selects it
+    // a moment later, and that must not move the list under the user).
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(selectedIndex) {
         val pos = visible.indexOf(selectedIndex)
         if (!hasFocus || pos < 0) return@LaunchedEffect
+        // Selected == already highlighted: this is the hover-select following a ▲/▼. Scrolling here
+        // snapped that row to the top of the list, so walking up the categories pushed the search
+        // field out of view the moment the highlight reached Favourites (and pulled it back when it
+        // moved on) — and made every stop on the way feel like the list jumped.
+        if (focusedIndex == selectedIndex) return@LaunchedEffect
         runCatching { listState.scrollToItem(pos + 1) } // +1: the search field is item 0
         withFrameNanos { }
         runCatching { rowFocusers[pos].requestFocus() }
@@ -685,7 +693,12 @@ internal fun LiveCategories(
                 }
                 item(key = entry.item.key.toString()) {
                     val rowModifier = Modifier.focusRequester(rowFocusers[pos]).then(rightKey)
-                        .onFocusChanged { if (it.hasFocus) onRowFocus(index) }
+                        .onFocusChanged {
+                            if (it.hasFocus) {
+                                focusedIndex = index
+                                onRowFocus(index)
+                            }
+                        }
                     val selected = index == selectedIndex
                     if (sheet) {
                         StageSheetItem(

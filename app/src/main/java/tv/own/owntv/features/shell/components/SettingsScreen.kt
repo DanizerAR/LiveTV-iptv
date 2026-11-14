@@ -637,6 +637,23 @@ fun SettingsScreen(
             chipTone = if (settingsBackdrop.glass) TileTone.PRIMARY else TileTone.SECONDARY,
             onClick = { tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropGlass(!settingsBackdrop.glass) },
         ),
+        RootRow(
+            "settings_inset", TileTone.SECONDARY, OwnTVIcon.PANEL_WIDTH,
+            title = stringResource(R.string.settings_window_inset),
+            desc = stringResource(R.string.settings_window_inset_description),
+            // Same control as the dimming: ◀ ▶ nudge it, OK walks the stops from edge to edge to
+            // a window well inside the bezel.
+            value = tv.own.owntv.features.settings.SettingValue.Stepper(
+                stringResource(R.string.settings_window_inset_value, settingsBackdrop.inset),
+            ),
+            onStep = { step ->
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropInset(settingsBackdrop.inset + step * INSET_STEP)
+            },
+            onClick = {
+                val next = insetStops.firstOrNull { it > settingsBackdrop.inset } ?: insetStops.first()
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropInset(next)
+            },
+        ),
         *stageLayoutRows(settingsVm, stageSettings) { saveScroll(); dialogReturn = it }.toTypedArray(),
 
         RootRow(
@@ -913,6 +930,11 @@ fun SettingsScreen(
             SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_backdrop_glass), stringResource(R.string.settings_backdrop_glass_description), OwnTVIcon.SPARKLE, TileTone.SECONDARY,
                 chip = stringResource(if (settingsBackdrop.glass) R.string.common_on else R.string.common_off), chipTone = if (settingsBackdrop.glass) TileTone.PRIMARY else TileTone.SECONDARY) {
                 tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropGlass(!settingsBackdrop.glass)
+            },
+            SettingsSearchEntry(stringResource(R.string.settings_group_layout), stringResource(R.string.settings_window_inset), stringResource(R.string.settings_window_inset_description), OwnTVIcon.PANEL_WIDTH, TileTone.SECONDARY,
+                chip = stringResource(R.string.settings_window_inset_value, settingsBackdrop.inset), chipTone = TileTone.SECONDARY) {
+                val next = insetStops.firstOrNull { it > settingsBackdrop.inset } ?: insetStops.first()
+                tv.own.owntv.features.live.LiveUiStore.setSettingsBackdropInset(next)
             },
             SettingsSearchEntry(stringResource(R.string.settings_live_tv), stringResource(R.string.settings_hide_empty_categories), stringResource(R.string.settings_hide_empty_categories_description), OwnTVIcon.LIST_GRID, TileTone.SECONDARY,
                 chip = stringResource(if (hideEmptyCategories) R.string.common_on else R.string.common_off), chipTone = if (hideEmptyCategories) TileTone.PRIMARY else TileTone.SECONDARY) {
@@ -1456,6 +1478,9 @@ private fun liveLayoutLabelRes(layout: tv.own.owntv.core.settings.SettingsReposi
 /** The dimming the window's slider walks in, and the stops OK cycles through. */
 private const val BACKDROP_STEP = 5
 private val backdropStops = listOf(0, 40, 78, 100)
+/** The window inset moves in 12 px steps: 4 presses from edge to edge to 48 px. */
+private const val INSET_STEP = 12
+private val insetStops = listOf(0, 24, 48, 72, 96)
 
 
 
