@@ -1010,9 +1010,12 @@ fun OwnTVShell(
             selectedSection == MainSection.SETTINGS -> { restoreFocus = true; onSelectSection(MainSection.MORE) }
             // Reached from a Search result: Back returns to Search once, its query, tab and row kept.
             searchReturn == selectedSection && focusedLayer != ShellLayer.SIDEBAR -> returnToSearch()
-            focusedLayer == ShellLayer.SIDEBAR -> showExit = true
+            // Nothing left to go back to: a short Back is deliberately inert, and the exit dialog
+            // waits for a held Back (see [backHoldAction]). It still consumes the press, so Android
+            // does not close the activity underneath us.
+            focusedLayer == ShellLayer.SIDEBAR -> Unit
             railVisible -> focusRail()
-            else -> showExit = true
+            else -> Unit
         }
     }
 
@@ -1031,6 +1034,19 @@ fun OwnTVShell(
     var shortcutLongFired by remember { mutableStateOf(false) }
     var shortcutHoldJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val longPressBackArmed = playerMode == PlayerMode.MINI && !showExit && !showPlaylistPicker
+    // Back leaves the app only when it is held: on the rail, or with the rail turned off, a short
+    // Back has nowhere left to go, so it does nothing and the exit dialog is a deliberate press.
+    val backHoldExitsApp = !showExit && !showPlaylistPicker &&
+        playerMode != PlayerMode.FULLSCREEN &&
+        (focusedLayer == ShellLayer.SIDEBAR || !railVisible) &&
+        selectedSection != MainSection.SETTINGS &&
+        selectedSection != MainSection.SEARCH
+    val backHoldAction: (() -> Unit)? = when {
+        // The docked player owns the long press: it toggles the now-playing focus.
+        longPressBackArmed -> ({ toggleNowPlayingFocus() })
+        backHoldExitsApp -> ({ showExit = true })
+        else -> null
+    }
     // Media keys (the third way in) act on the docked window wherever focus is — but only if nothing nearer
     // claimed them first, which is why this is a bubbling handler: a focused browse list still gets its
     // CH+/CH− paging, and the full-screen HUD still owns zapping.
@@ -1070,12 +1086,29 @@ fun OwnTVShell(
                 if (e.key != Key.Back) return@onPreviewKeyEvent false
                 when (e.type) {
                     KeyEventType.KeyDown -> {
-                        if (longPressBackArmed && backHoldJob == null) {
+                        val hold = backHoldAction
+                        // A held key reaches us twice: the press itself, and then the platform's own
+                        // long-press event (repeat count, FLAG_LONG_PRESS) once the press is old
+                        // enough. Take that flag as the answer when it comes — it is the same timing
+                        // the remote's own components use, and it beats the timer below on the slower
+                        // boxes instead of racing the key-up. Injected holds (adb, a test rig) carry it
+                        // too, which is how this can be exercised without a physical remote.
+                        val platformLongPress = (e.nativeKeyEvent.flags and android.view.KeyEvent.FLAG_LONG_PRESS) != 0
+                        if (hold != null && !backLongFired && platformLongPress) {
+                            backHoldJob?.cancel()
+                            backHoldJob = null
+                            backLongFired = true
+                            hold()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (hold != null && backHoldJob == null) {
                             backLongFired = false
                             backHoldJob = scope.launch {
-                                kotlinx.coroutines.delay(600)
+                                // The platform's own long-press timing: a held Back that a user
+                                // would already call a long press, and short of a slow tap.
+                                kotlinx.coroutines.delay(500)
                                 backLongFired = true
-                                toggleNowPlayingFocus()
+                                hold()
                             }
                         }
                         false
@@ -2063,6 +2096,8 @@ fun OwnTVShell(
 
     // The Settings window: the sections (or one section), over the picture.
     if (selectedSection == MainSection.MORE || selectedSection == MainSection.SETTINGS) {
+        // How much of the picture shows through, and how far the content sits from the bezel.
+        val settingsBackdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
         // The window opens with the focus on its first control, or the remote would go nowhere.
         val groupsEntry = remember { androidx.compose.ui.focus.FocusRequester() }
         LaunchedEffect(selectedSection) {
@@ -2078,44 +2113,51 @@ fun OwnTVShell(
             onSelectSection(shellVm.lastBrowseSection.value)
         }
         if (selectedSection == MainSection.SETTINGS) {
-            tv.own.owntv.features.settings.lock.SettingsPinGate(
-                onDismiss = { settingsStart = null; openEpgAdd = false; restoreFocus = true; onSelectSection(shellVm.sectionToLeaveLockedSettings()) },
-            ) {
-                SettingsScreen(
-                    themeMode = themeMode,
-                    uiZoomPercent = uiZoomPercent,
-                    onSetZoom = onSetZoom,
-                    fontCustomization = fontCustomization,
-                    onSetFontCustomization = onSetFontCustomization,
-                    onOpenPlaylist = {},
-                    // Back out of a section goes back to the list of sections.
-                    onBack = { onSelectSection(MainSection.MORE) },
-                    openEpgAdd = openEpgAdd,
-                    onEpgAddConsumed = { openEpgAdd = false },
-                    start = settingsStart,
-                    onStartConsumed = { settingsStart = null },
-                    onOpenSportsTeam = { t ->
-                        sportsMatchRequests.pendingTeam.value = t
-                        onSelectSection(MainSection.SPORTS)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
+            // The window is drawn around the gate, not inside it: while the lock state loads the
+            // gate renders nothing, and with the window inside it the Live TV screen behind showed
+            // through for a moment every time Settings was opened.
+            tv.own.owntv.features.shell.components.SettingsWindow(backdrop = settingsBackdrop) {
+                tv.own.owntv.features.settings.lock.SettingsPinGate(
+                    onDismiss = { settingsStart = null; openEpgAdd = false; restoreFocus = true; onSelectSection(shellVm.sectionToLeaveLockedSettings()) },
+                ) {
+                    SettingsScreen(
+                        themeMode = themeMode,
+                        uiZoomPercent = uiZoomPercent,
+                        onSetZoom = onSetZoom,
+                        fontCustomization = fontCustomization,
+                        onSetFontCustomization = onSetFontCustomization,
+                        onOpenPlaylist = {},
+                        // Back out of a section goes back to the list of sections.
+                        onBack = { onSelectSection(MainSection.MORE) },
+                        openEpgAdd = openEpgAdd,
+                        onEpgAddConsumed = { openEpgAdd = false },
+                        start = settingsStart,
+                        onStartConsumed = { settingsStart = null },
+                        onOpenSportsTeam = { t ->
+                            sportsMatchRequests.pendingTeam.value = t
+                            onSelectSection(MainSection.SPORTS)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         } else {
             // The sections themselves: the whole of Settings, and nothing else.
             val pinned by settingsVm.quickPinnedKeys.collectAsStateWithLifecycle()
-            tv.own.owntv.features.more.SettingsPage(
-                entry = groupsEntry,
-                pinned = pinned.size,
-                onOpenGroup = { group ->
-                    settingsStart = tv.own.owntv.features.shell.components.SettingsStart(group, false)
-                    onSelectSection(MainSection.SETTINGS)
-                },
-                onSearch = {
-                    settingsStart = tv.own.owntv.features.shell.components.SettingsStart(null, true)
-                    onSelectSection(MainSection.SETTINGS)
-                },
-            )
+            tv.own.owntv.features.shell.components.SettingsWindow(backdrop = settingsBackdrop) {
+                tv.own.owntv.features.more.SettingsPage(
+                    entry = groupsEntry,
+                    pinned = pinned.size,
+                    onOpenGroup = { group ->
+                        settingsStart = tv.own.owntv.features.shell.components.SettingsStart(group, false)
+                        onSelectSection(MainSection.SETTINGS)
+                    },
+                    onSearch = {
+                        settingsStart = tv.own.owntv.features.shell.components.SettingsStart(null, true)
+                        onSelectSection(MainSection.SETTINGS)
+                    },
+                )
+            }
         }
     }
 
