@@ -2061,9 +2061,8 @@ fun OwnTVShell(
         numberMiss = null
     }
 
-    // The Settings window: an overlay on the live picture, with the sections (or one section) in it.
+    // The Settings window: the sections (or one section), over the picture.
     if (selectedSection == MainSection.MORE || selectedSection == MainSection.SETTINGS) {
-        val backdrop by tv.own.owntv.features.live.LiveUiStore.settingsBackdrop.collectAsStateWithLifecycle()
         // The window opens with the focus on its first control, or the remote would go nowhere.
         val groupsEntry = remember { androidx.compose.ui.focus.FocusRequester() }
         LaunchedEffect(selectedSection) {
@@ -2073,58 +2072,50 @@ fun OwnTVShell(
                 if (runCatching { groupsEntry.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
             }
         }
-        tv.own.owntv.features.shell.components.SettingsOverlay(
-            backdrop = backdrop,
-            onBack = {
-                // A section inside the window goes back to the list of sections; from there, out.
-                if (selectedSection == MainSection.SETTINGS) {
-                    onSelectSection(MainSection.MORE)
-                } else {
-                    restoreFocus = true
-                    onSelectSection(shellVm.lastBrowseSection.value)
-                }
-            },
-        ) {
-            if (selectedSection == MainSection.SETTINGS) {
-                tv.own.owntv.features.settings.lock.SettingsPinGate(
-                    onDismiss = { settingsStart = null; openEpgAdd = false; restoreFocus = true; onSelectSection(shellVm.sectionToLeaveLockedSettings()) },
-                ) {
-                    SettingsScreen(
-                        themeMode = themeMode,
-                        uiZoomPercent = uiZoomPercent,
-                        onSetZoom = onSetZoom,
-                        fontCustomization = fontCustomization,
-                        onSetFontCustomization = onSetFontCustomization,
-                        onOpenPlaylist = {},
-                        // Back out of a section goes back to the list of sections.
-                        onBack = { onSelectSection(MainSection.MORE) },
-                        openEpgAdd = openEpgAdd,
-                        onEpgAddConsumed = { openEpgAdd = false },
-                        start = settingsStart,
-                        onStartConsumed = { settingsStart = null },
-                        onOpenSportsTeam = { t ->
-                            sportsMatchRequests.pendingTeam.value = t
-                            onSelectSection(MainSection.SPORTS)
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            } else {
-                // The sections themselves: the whole of Settings, and nothing else.
-                val pinned by settingsVm.quickPinnedKeys.collectAsStateWithLifecycle()
-                tv.own.owntv.features.more.SettingsPage(
-                    entry = groupsEntry,
-                    pinned = pinned.size,
-                    onOpenGroup = { group ->
-                        settingsStart = tv.own.owntv.features.shell.components.SettingsStart(group, false)
-                        onSelectSection(MainSection.SETTINGS)
+        // Back on the sections page leaves Settings; inside a section it goes back to the sections.
+        BackHandler(enabled = selectedSection == MainSection.MORE) {
+            restoreFocus = true
+            onSelectSection(shellVm.lastBrowseSection.value)
+        }
+        if (selectedSection == MainSection.SETTINGS) {
+            tv.own.owntv.features.settings.lock.SettingsPinGate(
+                onDismiss = { settingsStart = null; openEpgAdd = false; restoreFocus = true; onSelectSection(shellVm.sectionToLeaveLockedSettings()) },
+            ) {
+                SettingsScreen(
+                    themeMode = themeMode,
+                    uiZoomPercent = uiZoomPercent,
+                    onSetZoom = onSetZoom,
+                    fontCustomization = fontCustomization,
+                    onSetFontCustomization = onSetFontCustomization,
+                    onOpenPlaylist = {},
+                    // Back out of a section goes back to the list of sections.
+                    onBack = { onSelectSection(MainSection.MORE) },
+                    openEpgAdd = openEpgAdd,
+                    onEpgAddConsumed = { openEpgAdd = false },
+                    start = settingsStart,
+                    onStartConsumed = { settingsStart = null },
+                    onOpenSportsTeam = { t ->
+                        sportsMatchRequests.pendingTeam.value = t
+                        onSelectSection(MainSection.SPORTS)
                     },
-                    onSearch = {
-                        settingsStart = tv.own.owntv.features.shell.components.SettingsStart(null, true)
-                        onSelectSection(MainSection.SETTINGS)
-                    },
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+        } else {
+            // The sections themselves: the whole of Settings, and nothing else.
+            val pinned by settingsVm.quickPinnedKeys.collectAsStateWithLifecycle()
+            tv.own.owntv.features.more.SettingsPage(
+                entry = groupsEntry,
+                pinned = pinned.size,
+                onOpenGroup = { group ->
+                    settingsStart = tv.own.owntv.features.shell.components.SettingsStart(group, false)
+                    onSelectSection(MainSection.SETTINGS)
+                },
+                onSearch = {
+                    settingsStart = tv.own.owntv.features.shell.components.SettingsStart(null, true)
+                    onSelectSection(MainSection.SETTINGS)
+                },
+            )
         }
     }
 
