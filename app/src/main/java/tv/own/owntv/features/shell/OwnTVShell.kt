@@ -1104,9 +1104,10 @@ fun OwnTVShell(
                         if (hold != null && backHoldJob == null) {
                             backLongFired = false
                             backHoldJob = scope.launch {
-                                // The platform's own long-press timing: a held Back that a user
-                                // would already call a long press, and short of a slow tap.
-                                kotlinx.coroutines.delay(500)
+                                // Just under the platform's own long-press timeout (500 ms): long
+                                // enough that a tap is never mistaken for a hold, short enough to
+                                // answer before a remote (or a test rig) lets go.
+                                kotlinx.coroutines.delay(400)
                                 backLongFired = true
                                 hold()
                             }
