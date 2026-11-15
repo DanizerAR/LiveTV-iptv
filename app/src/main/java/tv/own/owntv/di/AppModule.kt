@@ -40,6 +40,7 @@ import tv.own.owntv.features.settings.OpenSubtitlesViewModel
 import tv.own.owntv.features.settings.PlayerButtonsSettingsViewModel
 import tv.own.owntv.features.settings.SettingsViewModel
 import tv.own.owntv.features.setup.DisplaySizeViewModel
+import tv.own.owntv.features.setup.PlaylistUserAgent
 import tv.own.owntv.features.setup.SetupViewModel
 import tv.own.owntv.features.shell.ShellViewModel
 import tv.own.owntv.features.subtitles.SubtitleSearchViewModel
@@ -67,6 +68,9 @@ val appModule = module {
     singleOf(::HomeFeedReader)
     // Sports Hub: which match the playing channel came from. Lazy; nothing runs until it is asked.
     singleOf(::SportsPlayback)
+    // Picks the User-Agent a playlist endpoint serves — asked only when the person left the field
+    // blank; see PlaylistUserAgent.
+    singleOf(::PlaylistUserAgent)
     // Picture-in-picture when leaving the app: one instance shared by the activity and the shell.
     singleOf(::PictureInPicture)
     // Process-long scope for work that must outlive the screen that started it (a first-run restore).
@@ -158,6 +162,7 @@ val appModule = module {
             enginePool = get(),
             importer = get(),
             sourceEditor = get(),
+            playlistUserAgent = get(),
         )
     }
     viewModelOf(::LocalSyncViewModel)

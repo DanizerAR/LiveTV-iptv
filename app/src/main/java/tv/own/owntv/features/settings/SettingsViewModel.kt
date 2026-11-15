@@ -93,6 +93,8 @@ class SettingsViewModel(
     // Adding a playlist is core's sequence, not a copy of it — see [importState].
     private val importer: SourceImporter,
     private val sourceEditor: SourceEditor,
+    /** The identity a playlist endpoint actually answers — see [PlaylistUserAgent]. */
+    private val playlistUserAgent: tv.own.owntv.features.setup.PlaylistUserAgent,
 ) : ViewModel() {
     companion object {
         private const val TAG = "OwnTVHome"
@@ -1349,7 +1351,7 @@ class SettingsViewModel(
     }
 
     fun addM3u(name: String, url: String, userAgent: String = "", epgUrl: String = "", autoRefresh: PlaylistRefresh = PlaylistRefresh.OFF, isDefault: Boolean = false, httpReferer: String = "") = runImport {
-        importer.m3u(name, url, userAgent, epgUrl, autoRefresh, makeDefault = isDefault, httpReferer = httpReferer)
+        importer.m3u(name, url, playlistUserAgent.resolve(url, userAgent), epgUrl, autoRefresh, makeDefault = isDefault, httpReferer = httpReferer)
     }
 
     /**

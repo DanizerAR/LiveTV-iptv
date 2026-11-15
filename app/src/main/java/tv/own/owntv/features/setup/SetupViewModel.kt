@@ -35,6 +35,8 @@ class SetupViewModel(
     private val appScope: kotlinx.coroutines.CoroutineScope,
     private val profiles: tv.own.owntv.core.profile.ProfileManager,
     private val profileDao: tv.own.owntv.core.database.dao.ProfileDao,
+    /** The identity a playlist endpoint actually answers — see [PlaylistUserAgent]. */
+    private val playlistUserAgent: PlaylistUserAgent,
 ) : ViewModel() {
 
     // ---- Remote (companion) add-source: a LAN web form fills the Add Source screen from another device. ----
@@ -142,7 +144,7 @@ class SetupViewModel(
     }
 
     fun startM3u(name: String, url: String, userAgent: String = "", epgUrl: String = "", autoRefresh: PlaylistRefresh = PlaylistRefresh.OFF, httpReferer: String = "") =
-        runImport { importer.m3u(name, url, userAgent, epgUrl, autoRefresh, httpReferer = httpReferer) }
+        runImport { importer.m3u(name, url, playlistUserAgent.resolve(url, userAgent), epgUrl, autoRefresh, httpReferer = httpReferer) }
 
     /**
      * Runs one import in the activity-scoped [viewModelScope] so "Run in background" can walk away

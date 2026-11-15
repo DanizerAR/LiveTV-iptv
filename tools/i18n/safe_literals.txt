@@ -644,6 +644,14 @@
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	m3u8
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	▶
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	◀ ▶
+4	empty	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	\0
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	#EXTM3U
+1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	Android
+1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	OTT Navigator
+1	log	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	PlaylistUserAgent
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	http
+1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	okhttp/5.5.0
+1	log	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	playlist refused the default User-Agent; using "$candidate"
 2	empty	app/src/main/java/tv/own/owntv/features/setup/RemoteSetupScreen.kt	\0
 1	technical	app/src/main/java/tv/own/owntv/features/setup/RemoteSetupScreen.kt	…
 14	empty	app/src/main/java/tv/own/owntv/features/setup/SetupViewModel.kt	\0
