@@ -644,14 +644,18 @@
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	m3u8
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	▶
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	◀ ▶
-1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	#EXTINF
-1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	#EXTM3U
-1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	#KODIPROP:
-1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	OwnTV-Playlist
-1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	mpegurl
-1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	plain
-1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	playlist: moved #KODIPROP below #EXTINF so the parser keeps it
-1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiPropOrder.kt	text
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	#EXTINF
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	#EXTM3U
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	#KODIPROP:
+1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	OwnTV-Playlist
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	dash
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	manifest_type
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	mpd
+1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	mpegurl
+1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	plain
+1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	playlist: manifest_type=dash stored as mpd, the token core's parser knows
+1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	playlist: moved #KODIPROP below #EXTINF so the parser keeps it
+1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	text
 4	empty	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	\0
 1	protocol	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	#EXTM3U
 1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	Android
