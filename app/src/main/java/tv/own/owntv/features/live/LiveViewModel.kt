@@ -117,6 +117,7 @@ class LiveViewModel(
     private val customize: CustomizationStore,
     private val launcherIntegrationRepository: LauncherIntegrationRepository,
     private val epgDao: tv.own.owntv.core.database.dao.EpgDao,
+    private val epgSourceStore: tv.own.owntv.core.epg.EpgSourceStore,
     /** Shared with the Guide: one now/next cache, so an invalidation reaches both screens. */
     private val epgReader: LiveEpgReader,
     val player: OwnTVPlayer,
@@ -477,8 +478,45 @@ class LiveViewModel(
     private val keyedNowNext: StateFlow<Pair<Long?, EpgNowNext?>> = combine(_previewChannel, epgRefresh) { ch, tick -> ch to tick }
         .debounce(350)
         .distinctUntilChanged { a, b -> a.first?.id == b.first?.id && a.second == b.second }
-        .mapLatest { (ch, _) -> ch?.id to ch?.let { epgReader.nowNext(it, custom.value, epgOffset.value) } }
+        .mapLatest { (ch, _) -> ch?.id to ch?.let { nowNextFor(it) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null to null)
+
+    /** The Guide's own row reader: it accepts a stored EPG match and, failing that, the channel's
+     *  own guide id — the same resolution the guide grid uses for its rows. */
+    private val guideReader =
+        tv.own.owntv.core.live.GuideReader(epgDao, epgSourceStore, sourceDao, epgReader)
+
+    /**
+     * The pane's now/next read.
+     *
+     * [LiveEpgReader.nowNext] only answers for channels with an entry in the profile's EPG matches,
+     * which only Auto-match EPG writes. A playlist that carries its own guide ids (every Tata Play /
+     * Jio TV channel does) therefore showed nothing under the picture — no now, no next, no schedule —
+     * while the guide and the channel rows happily listed the same channel's programmes. When the
+     * match lookup comes back empty, read the row the Guide reads and build the same answer.
+     */
+    private suspend fun nowNextFor(ch: ChannelEntity): EpgNowNext? {
+        epgReader.nowNext(ch, custom.value, epgOffset.value)?.let { return it }
+        val now = System.currentTimeMillis()
+        val rows = runCatching {
+            guideReader.row(ch, custom.value, epgOffset.value, now - 6 * 3_600_000L, now + 12 * 3_600_000L)
+        }.getOrElse { return null }
+        if (rows.isEmpty()) return null
+        // GuideReader has already applied the EPG shift: these times are wall-clock times.
+        val entries = rows.map { XtEpgEntry(it.title, it.description, it.startMs, it.stopMs, it.id) }
+        val lastStarted = entries.indexOfLast { it.startMs <= now }
+        val current = entries.getOrNull(lastStarted)?.takeIf { it.stopMs > now }
+        val from = when {
+            current != null -> lastStarted + 1
+            else -> entries.indexOfFirst { it.startMs > now }.let { if (it < 0) entries.size else it }
+        }
+        return EpgNowNext(
+            current,
+            entries.getOrNull(from),
+            entries.drop(from),
+            entries.getOrNull(if (current != null) lastStarted - 1 else lastStarted),
+        )
+    }
 
     val nowNext: StateFlow<EpgNowNext?> = keyedNowNext.map { it.second }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
