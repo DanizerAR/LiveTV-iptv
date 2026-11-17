@@ -561,6 +561,12 @@ fun LiveScreen(
 
     // CH± in the categories moves the highlight only; OK picks.
     var catFocusIndex by remember { mutableStateOf<Int?>(null) }
+    // While ▲/▼ is held the highlight races down the rail; following it mid-scroll is what made the
+    // channel list flicker through categories and land in the wrong one. Track the key itself so the
+    // list follows only the row the user stopped on. The long quiet fallback covers a missed KeyUp.
+    var categoryNavHeld by remember { mutableStateOf(false) }
+    var lastCategoryNavAt by remember { mutableStateOf(0L) }
+    var lastCategoryFocusAt by remember { mutableStateOf(0L) }
     // Whether the tool row (search, playlist, sort, guide) holds the focus: from there ▲ may leave
     // the pane for the top-bar pills.
     var toolRowFocused by remember { mutableStateOf(false) }
@@ -570,8 +576,8 @@ fun LiveScreen(
     val previewFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val focusPreview: () -> Boolean = { runCatching { previewFocus.requestFocus() }.getOrDefault(false) }
     // Moving the highlight over a category shows that category's channels: the list follows the
-    // highlight, so looking down the categories is looking down the channels. It waits a moment
-    // first, so a held ▼ does not reload the list on every row it passes.
+    // highlight, so looking down the categories is looking down the channels. It follows the row the
+    // key landed on, not every row a held ▲/▼ passed on the way there.
     //
     // The highlight is tracked with snapshotFlow, not a LaunchedEffect key: reading the state in
     // composition made every ▲/▼ recompose this whole screen (header, list and preview), which is
@@ -581,15 +587,41 @@ fun LiveScreen(
             if (idx == null) return@collectLatest
             val item = railItems.getOrNull(idx) ?: return@collectLatest
             if (item.sealed || item.key == selectedKey) return@collectLatest
-            // Long enough that a held ▼ does not reload the list on every row it passes, and short
-            // enough that the list still feels like it follows the highlight.
-            delay(320)
-            vm.selectForHover(item.key)
+            lastCategoryFocusAt = android.os.SystemClock.uptimeMillis()
+            // Each new highlight cancels this wait, so a burst of presses is settled as one move.
+            delay(240)
+            while (categoryNavHeld) {
+                val now = android.os.SystemClock.uptimeMillis()
+                val quiet = now - lastCategoryNavAt > 1_500L && now - lastCategoryFocusAt > 700L
+                if (quiet) {
+                    // Key-up was lost (focus left the pane mid-press, etc.); the highlight has been
+                    // still long enough that treating the key as released cannot interrupt a scroll.
+                    categoryNavHeld = false
+                    break
+                }
+                delay(80)
+            }
+            // Let the release's own focus change and the row's layout finish before reading the key.
+            delay(120)
+            val settled = railItems.getOrNull(catFocusIndex ?: idx) ?: item
+            if (!settled.sealed && settled.key != selectedKey) vm.selectForHover(settled.key)
         }
     }
     // Browsing the categories (or the search field) keeps the preview playing, like a TV: only picking
     // another channel or leaving Live TV changes it.
     val categoriesModifier = Modifier
+        // Preview only: the event still goes to normal D-pad focus movement and to chNavPaging.
+        .onPreviewKeyEvent { event ->
+            if (event.key == Key.DirectionUp || event.key == Key.DirectionDown) {
+                when (event.type) {
+                    KeyEventType.KeyDown -> categoryNavHeld = true
+                    KeyEventType.KeyUp -> categoryNavHeld = false
+                    else -> Unit
+                }
+                lastCategoryNavAt = android.os.SystemClock.uptimeMillis()
+            }
+            false
+        }
         .onFocusChanged {
             railPaneFocused = it.hasFocus
             // The sheet closes when focus leaves it (◀ to the rail) — not while its own menus are open,
