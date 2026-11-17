@@ -584,9 +584,17 @@ fun OwnTVShell(
                 }
                 val channel = (launch as? LauncherLaunch.Live)?.channel
                 if (channel != null && liveVm.isVisibleToActiveProfile(channel) && playerMode == PlayerMode.NONE) {
-                    zapSource = MainSection.LIVE_TV
-                    liveVm.watchFullscreen(channel, emptyList())
-                    playerMode = PlayerMode.FULLSCREEN
+                    if (tv.own.owntv.features.live.LiveUiStore.startupPreview.value) {
+                        // Chosen as "In the preview panel": open Live TV with the channel already in
+                        // the pane. revealChannel arms the preview, shows the channel's category and
+                        // scrolls/focuses its row; the picture starts on its own once the list settles.
+                        liveVm.revealChannel(channel)
+                        onSelectSection(MainSection.LIVE_TV)
+                    } else {
+                        zapSource = MainSection.LIVE_TV
+                        liveVm.watchFullscreen(channel, emptyList())
+                        playerMode = PlayerMode.FULLSCREEN
+                    }
                 } else {
                     onSelectSection(MainSection.LIVE_TV)
                     localSubToast.show(startupChannelUnavailable)

@@ -28,4 +28,8 @@
     <string name="live_no_channel">No channel %1$d</string>
     <string name="settings_panel_handles">Panel grab handles</string>
     <string name="settings_panel_handles_description">The small handles that resize the Live TV panels.</string>
+    <string name="settings_startup_play_title">Startup channel</string>
+    <string name="settings_startup_play_subtitle">How should this channel open when OwnTV starts?</string>
+    <string name="settings_startup_play_fullscreen">Full screen</string>
+    <string name="settings_startup_play_preview">In the preview panel</string>
 </resources>
