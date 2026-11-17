@@ -585,10 +585,13 @@ fun OwnTVShell(
                 val channel = (launch as? LauncherLaunch.Live)?.channel
                 if (channel != null && liveVm.isVisibleToActiveProfile(channel) && playerMode == PlayerMode.NONE) {
                     if (tv.own.owntv.features.live.LiveUiStore.startupPreview.value) {
-                        // Chosen as "In the preview panel": open Live TV with the channel already in
-                        // the pane. revealChannel arms the preview, shows the channel's category and
-                        // scrolls/focuses its row; the picture starts on its own once the list settles.
+                        // Chosen as "In the preview panel": open Live TV with the channel already
+                        // playing in the pane. revealChannel shows its category and scrolls/focuses
+                        // its row; playPreview is what starts the picture — with "OK previews first"
+                        // on (the usual setup) the pane only plays what OK chose, so arming alone
+                        // would leave the logo sitting there until the user pressed OK.
                         liveVm.revealChannel(channel)
+                        liveVm.playPreview(channel)
                         onSelectSection(MainSection.LIVE_TV)
                     } else {
                         zapSource = MainSection.LIVE_TV
