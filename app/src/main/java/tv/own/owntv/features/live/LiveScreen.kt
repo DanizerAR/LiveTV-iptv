@@ -298,29 +298,38 @@ fun LiveScreen(
     // Move to row [i]: scroll just enough to show it with one row of room (the edge-scroll rule), wait for
     // it to be laid out, then focus it. Works for a held key: nothing depends on focus search.
     // The row a burst of presses is heading for: every press counts from there, not from the row that
-    // still has focus, and the newest press cancels the step still in flight.
+    // still has focus. One worker walks to those targets, a row per frame; a press only moves the
+    // target on. Cancelling the step in flight on every press (the old way) dropped the presses in
+    // between, so a fast ▲/▼ burst moved once — when it stopped — and felt sluggish.
     var stepTarget by remember { mutableStateOf<Int?>(null) }
     var stepJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     fun stepTo(i: Int) {
         stepTarget = i
-        stepJob?.cancel()
+        if (stepJob?.isActive == true) return
         stepJob = scope.launch {
-            val info = effectiveListState.layoutInfo
-            val row = info.visibleItemsInfo.firstOrNull { it.index == i }
-            val step = ((info.visibleItemsInfo.firstOrNull()?.size ?: 0) + info.mainAxisItemSpacing).toFloat()
-            val delta = when {
-                row == null -> if (i > (info.visibleItemsInfo.lastOrNull()?.index ?: 0)) step else -step
-                row.offset - step < info.viewportStartOffset -> row.offset - step - info.viewportStartOffset
-                row.offset + row.size + step > info.viewportEndOffset -> row.offset + row.size + step - info.viewportEndOffset
-                else -> 0f
+            while (true) {
+                val target = stepTarget ?: break
+                val info = effectiveListState.layoutInfo
+                val row = info.visibleItemsInfo.firstOrNull { it.index == target }
+                val step = ((info.visibleItemsInfo.firstOrNull()?.size ?: 0) + info.mainAxisItemSpacing).toFloat()
+                val delta = when {
+                    row == null -> if (target > (info.visibleItemsInfo.lastOrNull()?.index ?: 0)) step else -step
+                    row.offset - step < info.viewportStartOffset -> row.offset - step - info.viewportStartOffset
+                    row.offset + row.size + step > info.viewportEndOffset -> row.offset + row.size + step - info.viewportEndOffset
+                    else -> 0f
+                }
+                if (delta != 0f) runCatching { effectiveListState.scrollBy(delta) }
+                if (effectiveListState.layoutInfo.visibleItemsInfo.none { it.index == target }) runCatching { effectiveListState.scrollToItem(target) }
+                withFrameNanos { }
+                runCatching { rowFocus(target).requestFocus() }
+                // A press that arrived while this row was moving set a newer target; keep it.
+                if (stepTarget == target) stepTarget = null
             }
-            if (delta != 0f) runCatching { effectiveListState.scrollBy(delta) }
-            if (effectiveListState.layoutInfo.visibleItemsInfo.none { it.index == i }) runCatching { effectiveListState.scrollToItem(i) }
-            withFrameNanos { }
-            runCatching { rowFocus(i).requestFocus() }
-            stepTarget = null
         }
     }
+    // A burst belongs to the list it started on: switching category or searching must not carry a
+    // queued row index into the new list.
+    LaunchedEffect(selectedKey, searchQuery) { stepTarget = null }
     // Land focus back on the long-pressed channel's row (or a sensible fallback if it's gone).
     suspend fun restoreToContextRow() {
         val targetId = contextChannelId
