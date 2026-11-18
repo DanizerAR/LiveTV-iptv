@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -427,7 +429,7 @@ open class MainActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxSize()) {
                         val profile = activeProfileId
                         when {
-                            profile == null || !profilesLoaded -> Unit // active id / Room list loading
+                            profile == null || !profilesLoaded -> LaunchScreen() // active id / Room list loading
                             // Adding a profile from the gate → onboard the new profile.
                             addingProfile -> Onboarding(
                                 firstRun = false,
@@ -493,6 +495,20 @@ open class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+}
+
+/**
+ * What the screen shows between the Android splash and the first profile-driven destination.
+ *
+ * The splash has a hard ceiling (see [SPLASH_TIMEOUT_MS]), and a cold launch can need several more
+ * seconds to open the database and read the profiles. Drawing nothing in that window read as a logo
+ * followed by a black screen; the same brand mark keeps the hand-off looking continuous.
+ */
+@Composable
+private fun LaunchScreen() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        tv.own.owntv.ui.components.BrandLockup()
     }
 }
 

@@ -342,20 +342,33 @@ internal fun LiveStagePane(
                 now.description?.takeIf { it.isNotBlank() }?.let {
                     Text(
                         it, style = stageText(19, 400).copy(lineHeight = (19 * 1.55f).mpxSp), color = stageTone(Color(0xFFCCD6D2), StageColors.Body),
-                        maxLines = 3, overflow = TextOverflow.Ellipsis,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 18.mpx),
                     )
                 }
             }
-            val next = nowNext?.next
-            val later = nowNext?.upcoming?.firstOrNull()
-            if (next != null) {
-                Row(
-                    Modifier.padding(top = 22.mpx).offset(x = (-12).mpx),
-                    horizontalArrangement = Arrangement.spacedBy(6.mpx),
+            // The channel's next programmes, the same list the Guide shows: static, display only —
+            // the pane is read while the list keeps the focus, so its rows never take a click. Two
+            // per row keeps four entries inside the lower half without pushing the actions off screen.
+            val schedule = buildList {
+                nowNext?.next?.let { add(it) }
+                nowNext?.upcoming?.let { addAll(it) }
+            }.distinctBy { it.startMs }.take(4)
+            if (schedule.isNotEmpty()) {
+                Column(
+                    Modifier.padding(top = 20.mpx).offset(x = (-12).mpx),
+                    verticalArrangement = Arrangement.spacedBy(2.mpx),
                 ) {
-                    LiveScheduleItem(next, accentTime = true)
-                    if (later != null) LiveScheduleItem(later, accentTime = false)
+                    schedule.chunked(2).forEachIndexed { rowIndex, pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.mpx)) {
+                            pair.forEachIndexed { i, p ->
+                                Box(Modifier.weight(1f)) {
+                                    LiveScheduleItem(p, accentTime = rowIndex == 0 && i == 0)
+                                }
+                            }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
                 }
             }
             // What can be done with this channel, right where its picture and its now/next are.

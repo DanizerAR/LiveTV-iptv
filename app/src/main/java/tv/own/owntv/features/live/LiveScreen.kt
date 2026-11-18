@@ -298,29 +298,38 @@ fun LiveScreen(
     // Move to row [i]: scroll just enough to show it with one row of room (the edge-scroll rule), wait for
     // it to be laid out, then focus it. Works for a held key: nothing depends on focus search.
     // The row a burst of presses is heading for: every press counts from there, not from the row that
-    // still has focus, and the newest press cancels the step still in flight.
+    // still has focus. One worker walks to those targets, a row per frame; a press only moves the
+    // target on. Cancelling the step in flight on every press (the old way) dropped the presses in
+    // between, so a fast ▲/▼ burst moved once — when it stopped — and felt sluggish.
     var stepTarget by remember { mutableStateOf<Int?>(null) }
     var stepJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     fun stepTo(i: Int) {
         stepTarget = i
-        stepJob?.cancel()
+        if (stepJob?.isActive == true) return
         stepJob = scope.launch {
-            val info = effectiveListState.layoutInfo
-            val row = info.visibleItemsInfo.firstOrNull { it.index == i }
-            val step = ((info.visibleItemsInfo.firstOrNull()?.size ?: 0) + info.mainAxisItemSpacing).toFloat()
-            val delta = when {
-                row == null -> if (i > (info.visibleItemsInfo.lastOrNull()?.index ?: 0)) step else -step
-                row.offset - step < info.viewportStartOffset -> row.offset - step - info.viewportStartOffset
-                row.offset + row.size + step > info.viewportEndOffset -> row.offset + row.size + step - info.viewportEndOffset
-                else -> 0f
+            while (true) {
+                val target = stepTarget ?: break
+                val info = effectiveListState.layoutInfo
+                val row = info.visibleItemsInfo.firstOrNull { it.index == target }
+                val step = ((info.visibleItemsInfo.firstOrNull()?.size ?: 0) + info.mainAxisItemSpacing).toFloat()
+                val delta = when {
+                    row == null -> if (target > (info.visibleItemsInfo.lastOrNull()?.index ?: 0)) step else -step
+                    row.offset - step < info.viewportStartOffset -> row.offset - step - info.viewportStartOffset
+                    row.offset + row.size + step > info.viewportEndOffset -> row.offset + row.size + step - info.viewportEndOffset
+                    else -> 0f
+                }
+                if (delta != 0f) runCatching { effectiveListState.scrollBy(delta) }
+                if (effectiveListState.layoutInfo.visibleItemsInfo.none { it.index == target }) runCatching { effectiveListState.scrollToItem(target) }
+                withFrameNanos { }
+                runCatching { rowFocus(target).requestFocus() }
+                // A press that arrived while this row was moving set a newer target; keep it.
+                if (stepTarget == target) stepTarget = null
             }
-            if (delta != 0f) runCatching { effectiveListState.scrollBy(delta) }
-            if (effectiveListState.layoutInfo.visibleItemsInfo.none { it.index == i }) runCatching { effectiveListState.scrollToItem(i) }
-            withFrameNanos { }
-            runCatching { rowFocus(i).requestFocus() }
-            stepTarget = null
         }
     }
+    // A burst belongs to the list it started on: switching category or searching must not carry a
+    // queued row index into the new list.
+    LaunchedEffect(selectedKey, searchQuery) { stepTarget = null }
     // Land focus back on the long-pressed channel's row (or a sensible fallback if it's gone).
     suspend fun restoreToContextRow() {
         val targetId = contextChannelId
@@ -552,6 +561,12 @@ fun LiveScreen(
 
     // CH± in the categories moves the highlight only; OK picks.
     var catFocusIndex by remember { mutableStateOf<Int?>(null) }
+    // While ▲/▼ is held the highlight races down the rail; following it mid-scroll is what made the
+    // channel list flicker through categories and land in the wrong one. Track the key itself so the
+    // list follows only the row the user stopped on. The long quiet fallback covers a missed KeyUp.
+    var categoryNavHeld by remember { mutableStateOf(false) }
+    var lastCategoryNavAt by remember { mutableStateOf(0L) }
+    var lastCategoryFocusAt by remember { mutableStateOf(0L) }
     // Whether the tool row (search, playlist, sort, guide) holds the focus: from there ▲ may leave
     // the pane for the top-bar pills.
     var toolRowFocused by remember { mutableStateOf(false) }
@@ -561,8 +576,8 @@ fun LiveScreen(
     val previewFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val focusPreview: () -> Boolean = { runCatching { previewFocus.requestFocus() }.getOrDefault(false) }
     // Moving the highlight over a category shows that category's channels: the list follows the
-    // highlight, so looking down the categories is looking down the channels. It waits a moment
-    // first, so a held ▼ does not reload the list on every row it passes.
+    // highlight, so looking down the categories is looking down the channels. It follows the row the
+    // key landed on, not every row a held ▲/▼ passed on the way there.
     //
     // The highlight is tracked with snapshotFlow, not a LaunchedEffect key: reading the state in
     // composition made every ▲/▼ recompose this whole screen (header, list and preview), which is
@@ -572,15 +587,41 @@ fun LiveScreen(
             if (idx == null) return@collectLatest
             val item = railItems.getOrNull(idx) ?: return@collectLatest
             if (item.sealed || item.key == selectedKey) return@collectLatest
-            // Long enough that a held ▼ does not reload the list on every row it passes, and short
-            // enough that the list still feels like it follows the highlight.
-            delay(320)
-            vm.selectForHover(item.key)
+            lastCategoryFocusAt = android.os.SystemClock.uptimeMillis()
+            // Each new highlight cancels this wait, so a burst of presses is settled as one move.
+            delay(240)
+            while (categoryNavHeld) {
+                val now = android.os.SystemClock.uptimeMillis()
+                val quiet = now - lastCategoryNavAt > 1_500L && now - lastCategoryFocusAt > 700L
+                if (quiet) {
+                    // Key-up was lost (focus left the pane mid-press, etc.); the highlight has been
+                    // still long enough that treating the key as released cannot interrupt a scroll.
+                    categoryNavHeld = false
+                    break
+                }
+                delay(80)
+            }
+            // Let the release's own focus change and the row's layout finish before reading the key.
+            delay(120)
+            val settled = railItems.getOrNull(catFocusIndex ?: idx) ?: item
+            if (!settled.sealed && settled.key != selectedKey) vm.selectForHover(settled.key)
         }
     }
     // Browsing the categories (or the search field) keeps the preview playing, like a TV: only picking
     // another channel or leaving Live TV changes it.
     val categoriesModifier = Modifier
+        // Preview only: the event still goes to normal D-pad focus movement and to chNavPaging.
+        .onPreviewKeyEvent { event ->
+            if (event.key == Key.DirectionUp || event.key == Key.DirectionDown) {
+                when (event.type) {
+                    KeyEventType.KeyDown -> categoryNavHeld = true
+                    KeyEventType.KeyUp -> categoryNavHeld = false
+                    else -> Unit
+                }
+                lastCategoryNavAt = android.os.SystemClock.uptimeMillis()
+            }
+            false
+        }
         .onFocusChanged {
             railPaneFocused = it.hasFocus
             // The sheet closes when focus leaves it (◀ to the rail) — not while its own menus are open,

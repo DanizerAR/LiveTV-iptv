@@ -177,10 +177,12 @@
 1	preference-key	app/src/main/java/tv/own/owntv/features/live/LiveUiStore.kt	settings_backdrop_glass
 1	preference-key	app/src/main/java/tv/own/owntv/features/live/LiveUiStore.kt	settings_window_padding
 1	preference-key	app/src/main/java/tv/own/owntv/features/live/LiveUiStore.kt	three_panel_seeded
-6	empty	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	\0
+7	empty	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	\0
+1	technical	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	
 1	technical	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	#$it
 1	log	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	LiveEngine
 1	log	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	OwnTVHome
+1	regex	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	[^\\p{L}\\p{N}]
 1	log	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	catch-up '${ch.name}' prog='${programme.title}' -> ${tv.own.owntv.core.network.HttpClient.redactUrl(url)}
 1	log	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	catch-up external '${ch.name}' prog='${programme.title}'
 1	log	app/src/main/java/tv/own/owntv/features/live/LiveViewModel.kt	ensurePlaying history profile=$pid channelId=${channel.id}
@@ -644,6 +646,26 @@
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	m3u8
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	▶
 1	technical	app/src/main/java/tv/own/owntv/features/setup/AddSourceScreen.kt	◀ ▶
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	#EXTINF
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	#EXTM3U
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	#KODIPROP:
+1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	OwnTV-Playlist
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	dash
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	manifest_type
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	mpd
+1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	mpegurl
+1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	plain
+1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	playlist: manifest_type=dash stored as mpd, the token core's parser knows
+1	log	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	playlist: moved #KODIPROP below #EXTINF so the parser keeps it
+1	mime	app/src/main/java/tv/own/owntv/features/setup/M3uKodiProps.kt	text
+4	empty	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	\0
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	#EXTM3U
+1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	Android
+1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	OTT Navigator
+1	log	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	PlaylistUserAgent
+1	protocol	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	http
+1	technical	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	okhttp/5.5.0
+1	log	app/src/main/java/tv/own/owntv/features/setup/PlaylistUserAgent.kt	playlist refused the default User-Agent; using "$candidate"
 2	empty	app/src/main/java/tv/own/owntv/features/setup/RemoteSetupScreen.kt	\0
 1	technical	app/src/main/java/tv/own/owntv/features/setup/RemoteSetupScreen.kt	…
 14	empty	app/src/main/java/tv/own/owntv/features/setup/SetupViewModel.kt	\0
@@ -786,6 +808,8 @@
 1	technical	app/src/main/java/tv/own/owntv/features/shell/components/StageStatus.kt	tnum
 1	technical	app/src/main/java/tv/own/owntv/features/shell/components/StageStatus.kt	·
 1	empty	app/src/main/java/tv/own/owntv/features/shell/components/StartupSettingsDialogs.kt	\0
+2	protocol	app/src/main/java/tv/own/owntv/features/shell/components/StartupSettingsDialogs.kt	fullscreen
+3	protocol	app/src/main/java/tv/own/owntv/features/shell/components/StartupSettingsDialogs.kt	preview
 3	empty	app/src/main/java/tv/own/owntv/features/shell/components/VodStage.kt	\0
 1	technical	app/src/main/java/tv/own/owntv/features/shell/components/VodStage.kt	%.1f
 1	technical	app/src/main/java/tv/own/owntv/features/shell/components/VodStage.kt	,

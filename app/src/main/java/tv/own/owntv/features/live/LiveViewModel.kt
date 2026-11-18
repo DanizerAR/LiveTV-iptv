@@ -12,9 +12,11 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.cachedIn
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -51,6 +53,7 @@ import tv.own.owntv.core.customize.CategoryRestorePlan
 import tv.own.owntv.core.customize.planCategoryRestore
 import tv.own.owntv.core.customize.restoreCategoryToDefault
 import tv.own.owntv.core.epg.CatchupUrl
+import tv.own.owntv.core.epg.EpgMatcher
 import tv.own.owntv.core.live.StreamGrant
 import tv.own.owntv.core.recording.RecordingSchedule
 import tv.own.owntv.core.customize.SectionCustomizations
@@ -103,6 +106,12 @@ import tv.own.owntv.core.live.LiveEpgReader
 import tv.own.owntv.core.live.LiveArchiveUrls
 import tv.own.owntv.core.live.CatchupContinue
 
+/** Keeps quality words ("HD", "SD") that [EpgMatcher] drops, so name ties can be broken by the exact name. */
+private val STRICT_EPG_NAME = Regex("[^\\p{L}\\p{N}]")
+
+/** Ceiling for the one-off channel scan that learns which logos belong to which guide ids. */
+private const val EPG_ALIAS_LOGO_SCAN_LIMIT = 50_000
+
 class LiveViewModel(
     private val appContext: Context,
     private val channelDao: ChannelDao,
@@ -117,6 +126,7 @@ class LiveViewModel(
     private val customize: CustomizationStore,
     private val launcherIntegrationRepository: LauncherIntegrationRepository,
     private val epgDao: tv.own.owntv.core.database.dao.EpgDao,
+    private val epgSourceStore: tv.own.owntv.core.epg.EpgSourceStore,
     /** Shared with the Guide: one now/next cache, so an invalidation reaches both screens. */
     private val epgReader: LiveEpgReader,
     val player: OwnTVPlayer,
@@ -367,6 +377,7 @@ class LiveViewModel(
     init {
         viewModelScope.launch {
             ctx.filter { it.profileId >= 0L }.map { it.sourceIds }.distinctUntilChanged().drop(1).collect { ids ->
+                clearEpgAliases() // logos were learned for the previous playlists
                 val key = _selected.value as? LiveKey.Folder ?: return@collect
                 val sourceId = categoryDao.getById(key.id)?.sourceId
                 if (sourceId == null || sourceId !in ids) _selected.value = LiveKey.All
@@ -433,6 +444,155 @@ class LiveViewModel(
     /** The same candidate set the Guide's picker uses — filtered by no source. */
     private val guideCandidates = tv.own.owntv.core.epg.GuideCandidates(epgDao)
 
+    /**
+     * Read-time guide aliases for channels whose own id cannot answer a guide read.
+     *
+     * The Tata Play rows in a drmlive playlist often have no `tvg-id` at all, while the JioTV rows
+     * beside them carry guide ids and do have programmes — the Guide therefore shows Sony/SET/SAB
+     * while the Live pane and the channel rows stay blank. Rather than writing a mapping into the
+     * user's customizations (which would silently change what "Match EPG" reports), the alias is
+     * resolved only for the read, from the same candidate set the Guide uses and the logos of the
+     * channels that already have a working id.
+     *
+     * Built once on first use, then cached per channel. The exact/logo paths are bounded lookups;
+     * [EpgMatcher] is only asked to score a fuzzy match when neither of them found an answer.
+     */
+    private data class EpgAliasIndex(
+        val prepared: List<EpgMatcher.Prepared>,
+        val keys: Set<String>,
+        val logoKeys: Map<String, Set<String>>,
+        val strictNameKeys: Map<String, Set<String>>,
+        val normalNameKeys: Map<String, Set<String>>,
+    )
+
+    @Volatile private var aliasIndex: EpgAliasIndex? = null
+    private var aliasIndexDeferred: Deferred<EpgAliasIndex>? = null
+    private var aliasGeneration = 0
+    private val aliasCache = object : LinkedHashMap<String, String?>(128, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String?>?) = size > 4_096
+    }
+    private val invalidatedAliasIds = HashSet<Long>()
+
+    private fun normalizeEpgKey(raw: String?): String? = raw?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+    /** Separator-stripped, case-folded name for exact logo/name ties; keeps quality words that EpgMatcher drops. */
+    private fun strictEpgName(raw: String): String =
+        STRICT_EPG_NAME.replace(raw.substringBeforeLast('.', raw).lowercase(), "")
+
+    private fun logoEpgName(url: String?): String? {
+        val file = url?.substringAfterLast('/')?.substringBefore('?')?.substringBefore('#') ?: return null
+        return strictEpgName(file).takeIf { it.isNotEmpty() }
+    }
+
+    private fun clearEpgAliases() {
+        aliasGeneration++
+        aliasIndex = null
+        synchronized(this) {
+            aliasIndexDeferred = null
+            aliasCache.clear()
+            invalidatedAliasIds.clear()
+        }
+    }
+
+    /** One shared build: a focused channel and a batch of rows can both ask at the same time. */
+    private suspend fun epgAliasIndex(): EpgAliasIndex {
+        aliasIndex?.let { return it }
+        val generation = aliasGeneration
+        val deferred = synchronized(this) {
+            aliasIndexDeferred ?: viewModelScope.async(Dispatchers.IO) { buildEpgAliasIndex() }
+                .also { aliasIndexDeferred = it }
+        }
+        val built = try {
+            deferred.await()
+        } finally {
+            synchronized(this) { if (aliasIndexDeferred === deferred) aliasIndexDeferred = null }
+        }
+        if (generation == aliasGeneration) aliasIndex = built
+        return built
+    }
+
+    private suspend fun buildEpgAliasIndex(): EpgAliasIndex = withContext(Dispatchers.IO) {
+        // Only ids that actually have stored programmes are worth aliasing to: an empty guide id is
+        // exactly the problem being fixed, and GuideCandidates carries that flag on every row.
+        val candidates = runCatching { guideCandidates.all() }.getOrDefault(emptyList())
+            .filter { it.hasProgrammes }
+        val keys = HashSet<String>(candidates.size * 2)
+        val strict = HashMap<String, LinkedHashSet<String>>(candidates.size)
+        val normal = HashMap<String, LinkedHashSet<String>>(candidates.size)
+        val rows = ArrayList<EpgMatcher.Candidate>(candidates.size)
+        for (candidate in candidates) {
+            val key = normalizeEpgKey(candidate.epgChannelId) ?: continue
+            keys += key
+            rows += EpgMatcher.Candidate(candidate.epgChannelId, candidate.displayName)
+            val name = candidate.displayName ?: continue
+            strict.getOrPut(strictEpgName(name)) { LinkedHashSet() } += key
+            normal.getOrPut(EpgMatcher.normalizeForEpg(name)) { LinkedHashSet() } += key
+        }
+
+        // A logo is often the only bridge between the two copies: `Sony_HD.png` on the Tata Play
+        // row and on the JioTV row whose guide id is 291, for example. Read only the channels of
+        // the active profile's playlists, once, and keep just those logos whose id has programmes.
+        val logos = HashMap<String, LinkedHashSet<String>>()
+        val sourceIds = ctx.value.sourceIds
+        if (sourceIds.isNotEmpty()) {
+            runCatching { channelDao.allForSources(sourceIds, EPG_ALIAS_LOGO_SCAN_LIMIT) }
+                .getOrDefault(emptyList())
+                .forEach { ch ->
+                    val key = normalizeEpgKey(ch.epgChannelId)?.takeIf { it in keys } ?: return@forEach
+                    val logo = logoEpgName(ch.logoUrl) ?: return@forEach
+                    logos.getOrPut(logo) { LinkedHashSet() } += key
+                }
+        }
+        EpgAliasIndex(EpgMatcher.prepare(rows), keys, logos, strict, normal)
+    }
+
+    /** The guide id to use for [ch], or null when its own id is all there is. */
+    private suspend fun resolvedAliasKey(ch: ChannelEntity): String? {
+        val cacheKey = listOf(ch.sourceId, ch.remoteId, ch.name, ch.logoUrl, ch.epgChannelId)
+            .joinToString("\u0001")
+        synchronized(aliasCache) { aliasCache[cacheKey] }?.let { return it }
+
+        val index = epgAliasIndex()
+        val own = normalizeEpgKey(ch.epgChannelId)
+        if (own != null && own in index.keys) {
+            synchronized(aliasCache) { aliasCache[cacheKey] = null }
+            return null
+        }
+
+        val logo = logoEpgName(ch.logoUrl)?.let { index.logoKeys[it] }
+        val strict = strictEpgName(ch.name).takeIf { it.isNotEmpty() }?.let { index.strictNameKeys[it] }
+        val normal = EpgMatcher.normalizeForEpg(ch.name).takeIf { it.isNotEmpty() }
+            ?.let { index.normalNameKeys[it] }
+        val key = when {
+            // One guide id with this exact logo is decisive — including when the names disagree
+            // ("SONY HD" vs "SET HD"), which is the common case in these playlists.
+            logo?.size == 1 -> logo.first()
+            strict?.size == 1 -> strict.first()
+            // "SONY SAB HD" normalizes to the same "sony sab" as two guide rows; the strict name
+            // still singles out the HD one. A genuine tie is left alone rather than guessed.
+            normal?.size == 1 -> normal.first()
+            normal != null && strict != null -> normal.firstOrNull { it in strict }
+            else -> EpgMatcher.bestEpgMatchPrepared(ch.name, index.prepared, EpgMatcher.AUTO_THRESHOLD)
+                ?.epgChannelId?.let(::normalizeEpgKey)
+        }?.takeIf { it in index.keys }
+
+        synchronized(aliasCache) { aliasCache[cacheKey] = key }
+        return key
+    }
+
+    /** [ch] with its guide id replaced by the resolved alias, when there is one. */
+    private suspend fun resolvedForGuide(ch: ChannelEntity): ChannelEntity {
+        // A manual match is the user's decision; never alias over it.
+        val manual = normalizeEpgKey(custom.value.epgMatchResolver.epgIdFor(ch))
+        if (manual != null) return ch.copy(epgChannelId = manual)
+        val alias = resolvedAliasKey(ch) ?: return ch
+        // LiveEpgReader caches by channel id, so a blank answer from before the alias must go.
+        synchronized(invalidatedAliasIds) {
+            if (invalidatedAliasIds.add(ch.id)) epgReader.invalidate(ch.id)
+        }
+        return ch.copy(epgChannelId = alias)
+    }
+
     /** Catch-up and live-rewind archive URL construction — see [LiveArchiveUrls]. */
     private val archiveUrls = LiveArchiveUrls(sourceDao, xtreamClient, streamUrlResolver, settings)
 
@@ -477,8 +637,63 @@ class LiveViewModel(
     private val keyedNowNext: StateFlow<Pair<Long?, EpgNowNext?>> = combine(_previewChannel, epgRefresh) { ch, tick -> ch to tick }
         .debounce(350)
         .distinctUntilChanged { a, b -> a.first?.id == b.first?.id && a.second == b.second }
-        .mapLatest { (ch, _) -> ch?.id to ch?.let { epgReader.nowNext(it, custom.value, epgOffset.value) } }
+        .mapLatest { (ch, _) -> ch?.id to ch?.let { nowNextFor(it) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null to null)
+
+    /** The Guide's own row reader: it accepts a stored EPG match and, failing that, the channel's
+     *  own guide id — the same resolution the guide grid uses for its rows. */
+    private val guideReader =
+        tv.own.owntv.core.live.GuideReader(epgDao, epgSourceStore, sourceDao, epgReader)
+
+    /**
+     * The pane's now/next read.
+     *
+     * [LiveEpgReader.nowNext] only answers for channels with a guide id that resolves to programmes,
+     * and a playlist that carries no id at all (the Tata Play half of a drmlive lineup) gets neither
+     * that nor a Guide row. In that case [resolvedForGuide] finds the JioTV copy of the same channel
+     * by name or logo and the read is retried against its id — the pane then agrees with the Guide
+     * instead of showing a blank title and an empty schedule under the picture.
+     */
+    private suspend fun nowNextFor(ch: ChannelEntity): EpgNowNext? {
+        val direct = epgReader.nowNext(ch, custom.value, epgOffset.value)
+            ?.takeIf { it.now != null || it.next != null || it.upcoming.isNotEmpty() }
+        if (direct != null) return direct
+
+        val now = System.currentTimeMillis()
+        guideRowsFor(ch, now).takeIf { it.isNotEmpty() }?.let { return nowNextFrom(it, now) }
+
+        val aliased = resolvedForGuide(ch)
+        if (aliased.epgChannelId == ch.epgChannelId) return null
+        epgReader.nowNext(aliased, custom.value, epgOffset.value)
+            ?.takeIf { it.now != null || it.next != null || it.upcoming.isNotEmpty() }
+            ?.let { return it }
+        return guideRowsFor(aliased, now).takeIf { it.isNotEmpty() }?.let { nowNextFrom(it, now) }
+    }
+
+    /** Guide rows in a wide-enough window that one channel's whole evening is available. */
+    private suspend fun guideRowsFor(ch: ChannelEntity, now: Long): List<XtEpgEntry> {
+        val rows = runCatching {
+            guideReader.row(ch, custom.value, epgOffset.value, now - 6 * 3_600_000L, now + 12 * 3_600_000L)
+        }.getOrDefault(emptyList())
+        // GuideReader has already applied the EPG shift: these times are wall-clock times.
+        return rows.map { XtEpgEntry(it.title, it.description, it.startMs, it.stopMs, it.id) }
+    }
+
+    /** The same now / next / later shape the stored-guide path builds in [LiveEpgReader]. */
+    private fun nowNextFrom(entries: List<XtEpgEntry>, now: Long): EpgNowNext {
+        val lastStarted = entries.indexOfLast { it.startMs <= now }
+        val current = entries.getOrNull(lastStarted)?.takeIf { it.stopMs > now }
+        val from = when {
+            current != null -> lastStarted + 1
+            else -> entries.indexOfFirst { it.startMs > now }.let { if (it < 0) entries.size else it }
+        }
+        return EpgNowNext(
+            current,
+            entries.getOrNull(from),
+            entries.drop(from),
+            entries.getOrNull(if (current != null) lastStarted - 1 else lastStarted),
+        )
+    }
 
     val nowNext: StateFlow<EpgNowNext?> = keyedNowNext.map { it.second }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -800,6 +1015,7 @@ class LiveViewModel(
             // so the details pane reflects the new match immediately instead of after a restart.
             val id = epgChannelId?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
             if (id != null) runCatching { epgRepository.storeProgrammesForIdsFromCache(setOf(id)) }
+            clearEpgAliases() // a manual match must win over anything the alias index would infer
             epgReader.invalidate(channel.id)
             epgRefresh.value++
         }
@@ -2227,8 +2443,21 @@ class LiveViewModel(
      * guide simply has no entry here, and the row shows no second line. Returns only channels that
      * actually have something airing right now.
      */
-    suspend fun nowPlayingFor(channels: List<ChannelEntity>): Map<Long, tv.own.owntv.core.parser.XtEpgEntry> =
-        epgReader.nowProgrammesFor(channels, custom.value, epgOffset.value)
+    suspend fun nowPlayingFor(channels: List<ChannelEntity>): Map<Long, tv.own.owntv.core.parser.XtEpgEntry> {
+        val direct = epgReader.nowProgrammesFor(channels, custom.value, epgOffset.value)
+        // The row subtitle reads a batch that is never allowed to hit the provider API. Aliases are
+        // therefore resolved only for the channels the shared guide could not answer, then read in
+        // one more bounded batch — the same two-pass shape as LiveEpgReader's cached second pass.
+        val missing = channels.filter { it.id !in direct }
+        if (missing.isEmpty()) return direct
+        val aliased = missing.mapNotNull { ch ->
+            resolvedForGuide(ch).takeIf { it.epgChannelId != ch.epgChannelId }
+        }
+        if (aliased.isEmpty()) return direct
+        return direct + runCatching {
+            epgReader.nowProgrammesFor(aliased, custom.value, epgOffset.value)
+        }.getOrDefault(emptyMap())
+    }
 
     /**
      * Current programme title per channel id, shared by the Live list and the in-player overlays.

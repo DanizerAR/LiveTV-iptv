@@ -209,6 +209,7 @@ fun AddSourceScreen(
     // Runs against what is TYPED, not what is saved, so an account can be checked while adding it.
     // Read-only: it asks the provider for its account status and stores nothing.
     val sourceTester: SourceTester = koinInject()
+    val playlistUserAgent: PlaylistUserAgent = koinInject()
     var sourceTest by remember { mutableStateOf<SourceTestUi?>(null) }
     // True while the "this stops playback and takes a while" confirmation is up.
     var confirmMeasure by remember { mutableStateOf(false) }
@@ -260,7 +261,14 @@ fun AddSourceScreen(
         val label = name.ifBlank { probe.url }
         sourceTest = SourceTestUi.Running(label)
         scope.launch {
-            val result = sourceTester.test(probe)
+            // A playlist that only answers certain identities would fail this test on the default
+            // User-Agent while the import (which resolves one first) works. Ask the same question.
+            val tested = if (probe.type == SourceType.M3U) {
+                probe.copy(userAgent = playlistUserAgent.resolve(probe.url, probe.userAgent.orEmpty()).takeIf { it.isNotBlank() })
+            } else {
+                probe
+            }
+            val result = sourceTester.test(tested)
             // Dismissed while the request was in flight — don't reopen the dialog behind the user.
             if (sourceTest != null) sourceTest = SourceTestUi.Done(label, result)
         }

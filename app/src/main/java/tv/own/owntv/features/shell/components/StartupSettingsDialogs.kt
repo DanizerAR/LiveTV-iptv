@@ -11,7 +11,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -134,6 +136,27 @@ internal fun StartupDialogHost(settingsVm: SettingsViewModel, startupMode: tv.ow
 internal fun StartupChannelPickerHost(settingsVm: SettingsViewModel, startupChannel: tv.own.owntv.core.settings.StartupChannelRef?, onClose: () -> Unit) {
     val startupChannelQuery by settingsVm.startupChannelQuery.collectAsStateWithLifecycle()
     val startupChannelResults by settingsVm.startupChannelResults.collectAsStateWithLifecycle()
+    val startupPreview by tv.own.owntv.features.live.LiveUiStore.startupPreview.collectAsStateWithLifecycle()
+    // Picking a channel asks how it should open; the channel is already saved when this shows, so
+    // dismissing the second step only keeps the previous playback choice.
+    var picked by remember { mutableStateOf(false) }
+    if (picked) {
+        tv.own.owntv.features.settings.PickerDialog(
+            title = stringResource(R.string.settings_startup_play_title),
+            options = listOf(
+                "fullscreen" to stringResource(R.string.settings_startup_play_fullscreen),
+                "preview" to stringResource(R.string.settings_startup_play_preview),
+            ),
+            selected = if (startupPreview) "preview" else "fullscreen",
+            onSelect = { mode ->
+                tv.own.owntv.features.live.LiveUiStore.setStartupPreview(mode == "preview")
+                onClose()
+            },
+            onDismiss = { onClose() },
+            subtitle = stringResource(R.string.settings_startup_play_subtitle),
+        )
+        return
+    }
     StartupChannelPickerDialog(
         query = startupChannelQuery,
         channels = startupChannelResults,
@@ -141,7 +164,7 @@ internal fun StartupChannelPickerHost(settingsVm: SettingsViewModel, startupChan
         onQueryChange = settingsVm::setStartupChannelQuery,
         onSelect = {
             settingsVm.setStartupChannel(it)
-            onClose()
+            picked = true
         },
         onDismiss = { onClose() },
     )

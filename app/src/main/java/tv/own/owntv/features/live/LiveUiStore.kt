@@ -41,6 +41,7 @@ object LiveUiStore {
     private const val KEY_BACKDROP_GLASS = "settings_backdrop_glass"
     private const val KEY_BACKDROP_INSET = "settings_window_padding"
     private const val KEY_PANEL_HANDLES = "panel_grab_handles"
+    private const val KEY_STARTUP_PREVIEW = "startup_channel_preview"
 
     /** The start of the window's edge-to-edge look: past this the rows would meet in the middle. */
     private const val MAX_INSET = 120
@@ -72,6 +73,14 @@ object LiveUiStore {
     private val _panelHandles = MutableStateFlow(true)
     val panelHandles: StateFlow<Boolean> = _panelHandles.asStateFlow()
 
+    /**
+     * The startup channel opens in the third panel's preview instead of full screen. Chosen when the
+     * startup channel is picked ("Full screen" or "Preview"), and only used by
+     * [tv.own.owntv.core.settings.StartupMode.SPECIFIC_CHANNEL].
+     */
+    private val _startupPreview = MutableStateFlow(false)
+    val startupPreview: StateFlow<Boolean> = _startupPreview.asStateFlow()
+
     fun init(context: Context) {
         if (::prefs.isInitialized) return
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -86,6 +95,7 @@ object LiveUiStore {
             inset = prefs.getInt(KEY_BACKDROP_INSET, SettingsBackdrop.DEFAULT_INSET).coerceIn(0, MAX_INSET),
         )
         _panelHandles.value = prefs.getBoolean(KEY_PANEL_HANDLES, true)
+        _startupPreview.value = prefs.getBoolean(KEY_STARTUP_PREVIEW, false)
     }
 
     fun setRailVisible(visible: Boolean) {
@@ -128,6 +138,12 @@ object LiveUiStore {
     fun setPanelHandles(shown: Boolean) {
         _panelHandles.value = shown
         if (::prefs.isInitialized) prefs.edit { putBoolean(KEY_PANEL_HANDLES, shown) }
+    }
+
+    /** Whether the startup channel opens in the preview, asked when the channel is picked. */
+    fun setStartupPreview(preview: Boolean) {
+        _startupPreview.value = preview
+        if (::prefs.isInitialized) prefs.edit { putBoolean(KEY_STARTUP_PREVIEW, preview) }
     }
 
     /** The window's own frosted surface, over the dimming. */
